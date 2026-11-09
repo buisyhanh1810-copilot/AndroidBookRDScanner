@@ -43,20 +43,41 @@ class MainActivity : AppCompatActivity() {
     private val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private var counter = 0
     private val saved = mutableListOf<Uri>()
-    private var camUri: Uri? = null
+    private var camFile: File? = null
+    private val pendingFiles = mutableListOf<File>()
 
+    // Chọn nhiều ảnh cùng lúc từ thư viện
     private val pickImages =
         registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
             if (uris.isNotEmpty()) processAll(uris)
         }
+
+    // Chụp liên tục: mỗi lần chụp xong tự mở lại camera; thoát camera thì xử lý cả loạt
     private val takePicture =
         registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-            if (ok) camUri?.let { processAll(listOf(it)) }
+            val f = camFile
+            if (ok && f != null && f.length() > 0) {
+                pendingFiles.add(f)
+                tvStatus.text = "Đã chụp ${pendingFiles.size} ảnh – chụp tiếp, hoặc thoát camera để xử lý"
+                launchCamera()
+            } else {
+                f?.delete()
+                camFile = null
+                if (pendingFiles.isNotEmpty()) {
+                    val batch = pendingFiles.toList()
+                    pendingFiles.clear()
+                    processAll(batch.map { fileUri(it) }, batch)
+                }
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        savedInstanceState?.let { b ->
+            b.getString("cam")?.let { camFile = File(it) }
+            b.getStringArrayList("pending")?.forEach { pendingFiles.add(File(it)) }
+        }
         if (!OpenCVLoader.initLocal()) {
             Toast.makeText(this, "Không nạp được OpenCV", Toast.LENGTH_LONG).show()
         }
@@ -81,9 +102,17 @@ class MainActivity : AppCompatActivity() {
             listOf("Tự động", "Luôn tách đôi", "Không tách (1 trang)")
         )
 
-        btnCamera.setOnClickListener { launchCamera() }
+        spMode.setSelection(OutMode.BW.ordinal) // mặc định: đen trắng
+
+        btnCamera.setOnClickListener { pendingFiles.clear(); launchCamera() }
         btnPick.setOnClickListener { pickImages.launch("image/*") }
         btnPdf.setOnClickListener { exportPdf() }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("cam", camFile?.absolutePath)
+        outState.putStringArrayList("pending", ArrayList(pendingFiles.map { it.absolutePath }))
     }
 
     private fun options() = ScanOptions(
@@ -96,10 +125,12 @@ class MainActivity : AppCompatActivity() {
     private fun launchCamera() {
         val dir = File(cacheDir, "images").apply { mkdirs() }
         val f = File(dir, "cap_${System.currentTimeMillis()}.jpg")
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-        camUri = uri
-        takePicture.launch(uri)
+        camFile = f
+        takePicture.launch(fileUri(f))
     }
+
+    private fun fileUri(f: File): Uri =
+        FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
 
     private fun setBusy(b: Boolean) {
         progress.visibility = if (b) View.VISIBLE else View.GONE
@@ -108,7 +139,7 @@ class MainActivity : AppCompatActivity() {
         btnPdf.isEnabled = !b
     }
 
-    private fun processAll(uris: List<Uri>) {
+    private fun processAll(uris: List<Uri>, tempFiles: List<File> = emptyList()) {
         val opt = options()
         setBusy(true)
         lifecycleScope.launch {
@@ -123,7 +154,8 @@ class MainActivity : AppCompatActivity() {
                     tvStatus.text = "Lỗi ở ảnh ${i + 1}: ${e.message}"
                 }
             }
-            tvStatus.text = "Xong: $total trang đã lưu vào Pictures/BookScanner"
+            tempFiles.forEach { it.delete() }
+            tvStatus.text = "Xong: $total trang từ ${uris.size} ảnh, đã lưu vào Pictures/BookScanner"
             setBusy(false)
         }
     }
