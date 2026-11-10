@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -29,133 +30,134 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var spMode: Spinner
     private lateinit var spSplit: Spinner
     private lateinit var cbCrop: CheckBox
     private lateinit var cbDeskew: CheckBox
+    private lateinit var etPageW: EditText
+    private lateinit var etMargin: EditText
     private lateinit var tvStatus: TextView
+    private lateinit var tvQueue: TextView
     private lateinit var progress: ProgressBar
     private lateinit var results: LinearLayout
     private lateinit var btnCamera: Button
     private lateinit var btnPick: Button
+    private lateinit var btnProcess: Button
+    private lateinit var btnClear: Button
     private lateinit var btnPdf: Button
 
     private val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private var counter = 0
-    private val saved = mutableListOf<Uri>()
-    private var camFile: File? = null
-    private val pendingFiles = mutableListOf<File>()
+    private val queue = mutableListOf<Uri>()      // ảnh gốc chờ xử lý
+    private val saved = mutableListOf<Uri>()      // trang đã lưu
+    private var camUri: Uri? = null
+    private var busy = false
 
-    // Chọn nhiều ảnh cùng lúc từ thư viện
     private val pickImages =
         registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-            if (uris.isNotEmpty()) processAll(uris)
+            if (uris.isNotEmpty()) addToQueue(uris)
         }
 
-    // Chụp liên tục: mỗi lần chụp xong tự mở lại camera; thoát camera thì xử lý cả loạt
+    // Chụp liên tục: chụp xong 1 ảnh thì mở lại camera; huỷ/quay lại để dừng.
     private val takePicture =
         registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-            val f = camFile
-            if (ok && f != null && f.length() > 0) {
-                pendingFiles.add(f)
-                tvStatus.text = "Đã chụp ${pendingFiles.size} ảnh – chụp tiếp, hoặc thoát camera để xử lý"
+            if (ok) {
+                camUri?.let { addToQueue(listOf(it)) }
                 launchCamera()
-            } else {
-                f?.delete()
-                camFile = null
-                if (pendingFiles.isNotEmpty()) {
-                    val batch = pendingFiles.toList()
-                    pendingFiles.clear()
-                    processAll(batch.map { fileUri(it) }, batch)
-                }
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        savedInstanceState?.let { b ->
-            b.getString("cam")?.let { camFile = File(it) }
-            b.getStringArrayList("pending")?.forEach { pendingFiles.add(File(it)) }
-        }
         if (!OpenCVLoader.initLocal()) {
             Toast.makeText(this, "Không nạp được OpenCV", Toast.LENGTH_LONG).show()
         }
 
-        spMode = findViewById(R.id.spMode)
         spSplit = findViewById(R.id.spSplit)
         cbCrop = findViewById(R.id.cbCrop)
         cbDeskew = findViewById(R.id.cbDeskew)
+        etPageW = findViewById(R.id.etPageW)
+        etMargin = findViewById(R.id.etMargin)
         tvStatus = findViewById(R.id.tvStatus)
+        tvQueue = findViewById(R.id.tvQueue)
         progress = findViewById(R.id.progress)
         results = findViewById(R.id.results)
         btnCamera = findViewById(R.id.btnCamera)
         btnPick = findViewById(R.id.btnPick)
+        btnProcess = findViewById(R.id.btnProcess)
+        btnClear = findViewById(R.id.btnClear)
         btnPdf = findViewById(R.id.btnPdf)
 
-        spMode.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("Xám – xoá bóng (giống bản scan)", "Đen trắng", "Màu – xoá bóng")
-        )
         spSplit.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
             listOf("Tự động", "Luôn tách đôi", "Không tách (1 trang)")
         )
 
-        spMode.setSelection(OutMode.BW.ordinal) // mặc định: đen trắng
-
-        btnCamera.setOnClickListener { pendingFiles.clear(); launchCamera() }
+        btnCamera.setOnClickListener { launchCamera() }
         btnPick.setOnClickListener { pickImages.launch("image/*") }
+        btnProcess.setOnClickListener { processQueue() }
+        btnClear.setOnClickListener { queue.clear(); updateQueueUi() }
         btnPdf.setOnClickListener { exportPdf() }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putString("cam", camFile?.absolutePath)
-        outState.putStringArrayList("pending", ArrayList(pendingFiles.map { it.absolutePath }))
+        updateQueueUi()
     }
 
     private fun options() = ScanOptions(
-        mode = OutMode.values()[spMode.selectedItemPosition],
         split = SplitMode.values()[spSplit.selectedItemPosition],
         autoCrop = cbCrop.isChecked,
-        deskew = cbDeskew.isChecked
+        deskew = cbDeskew.isChecked,
+        pageWidthCm = (etPageW.text.toString().replace(',', '.').toDoubleOrNull() ?: 15.0).coerceIn(5.0, 60.0),
+        marginCm = (etMargin.text.toString().replace(',', '.').toDoubleOrNull() ?: 1.0).coerceIn(0.0, 5.0)
     )
+
+    private fun addToQueue(uris: List<Uri>) {
+        queue.addAll(uris)
+        updateQueueUi()
+    }
+
+    private fun updateQueueUi() {
+        tvQueue.text = "Hàng đợi: ${queue.size} ảnh"
+        btnProcess.text = if (queue.isEmpty()) "Xử lý hàng đợi" else "Xử lý ${queue.size} ảnh"
+        btnProcess.isEnabled = !busy && queue.isNotEmpty()
+        btnClear.isEnabled = !busy && queue.isNotEmpty()
+    }
 
     private fun launchCamera() {
         val dir = File(cacheDir, "images").apply { mkdirs() }
         val f = File(dir, "cap_${System.currentTimeMillis()}.jpg")
-        camFile = f
-        takePicture.launch(fileUri(f))
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+        camUri = uri
+        takePicture.launch(uri)
     }
 
-    private fun fileUri(f: File): Uri =
-        FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-
     private fun setBusy(b: Boolean) {
+        busy = b
         progress.visibility = if (b) View.VISIBLE else View.GONE
         btnCamera.isEnabled = !b
         btnPick.isEnabled = !b
         btnPdf.isEnabled = !b
+        updateQueueUi()
     }
 
-    private fun processAll(uris: List<Uri>, tempFiles: List<File> = emptyList()) {
+    private fun processQueue() {
+        if (queue.isEmpty()) return
         val opt = options()
+        val work = queue.toList()
         setBusy(true)
         lifecycleScope.launch {
             var total = 0
-            for ((i, uri) in uris.withIndex()) {
-                tvStatus.text = "Đang xử lý ảnh ${i + 1}/${uris.size}…"
+            for ((i, uri) in work.withIndex()) {
+                tvStatus.text = "Đang xử lý ảnh ${i + 1}/${work.size}…"
                 try {
                     val outs = withContext(Dispatchers.Default) { processOne(uri, opt) }
                     for ((u, th) in outs) addThumb(u, th)
                     total += outs.size
+                    queue.remove(uri)
+                    updateQueueUi()
                 } catch (e: Throwable) {
                     tvStatus.text = "Lỗi ở ảnh ${i + 1}: ${e.message}"
                 }
             }
-            tempFiles.forEach { it.delete() }
-            tvStatus.text = "Xong: $total trang từ ${uris.size} ảnh, đã lưu vào Pictures/BookScanner"
+            tvStatus.text = "Xong: $total trang đã lưu vào Pictures/BookScanner"
             setBusy(false)
         }
     }

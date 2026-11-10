@@ -1,8 +1,8 @@
 # Book Scanner (Android)
 
-Chụp/chọn ảnh một trang sách mở (2 trang liền nhau) → app tự tìm viền sách, nắn phẳng,
-tìm rãnh gáy, tách thành 2 trang theo thứ tự (trái → phải), xoá bóng, làm trắng nền,
-chỉnh nghiêng, lưu JPEG vào `Pictures/BookScanner`. Có nút gộp PDF (`Download/BookScanner`).
+Chụp liên tục/chọn nhiều ảnh vào hàng đợi, bấm *Xử lý* sau. Mỗi ảnh là một trang sách mở (2 trang liền nhau) → app tự tìm viền sách, nắn phẳng,
+tìm rãnh gáy, tách thành 2 trang theo thứ tự (trái → phải), xoá bóng, chuyển đen trắng,
+chỉnh nghiêng, cắt theo nội dung + lề dư 1 cm (chỉnh được), lưu JPEG vào `Pictures/BookScanner`. Có nút gộp PDF (`Download/BookScanner`).
 
 ## Build bằng GitHub Actions
 1. Tạo repo mới trên GitHub, đẩy toàn bộ thư mục này lên nhánh `main`.

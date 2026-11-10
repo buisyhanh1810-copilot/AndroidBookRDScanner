@@ -17,20 +17,20 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-enum class OutMode { GRAY, BW, COLOR }
 enum class SplitMode { AUTO, ALWAYS, NEVER }
 
 data class ScanOptions(
-    val mode: OutMode = OutMode.GRAY,
     val split: SplitMode = SplitMode.AUTO,
     val autoCrop: Boolean = true,
     val deskew: Boolean = true,
+    val pageWidthCm: Double = 15.0,   // bề rộng thật của 1 trang sách, để đổi cm -> pixel
+    val marginCm: Double = 1.0,       // lề dư quanh nội dung
     val maxSide: Int = 3000
 )
 
 /**
- * Pipeline: ảnh chụp 2 trang -> tìm viền sách -> nắn phẳng -> tìm rãnh gáy -> tách đôi
- * -> xoá bóng/nền -> kéo trắng-đen -> chỉnh nghiêng -> trang chuẩn.
+ * Ảnh chụp 2 trang -> tìm viền sách (bao trọn, không cắt góc) -> nắn phẳng -> tách theo gáy
+ * -> xoá bóng -> đen trắng -> chỉnh nghiêng -> cắt theo nội dung + lề dư (mặc định 1 cm).
  */
 object BookScanner {
 
@@ -152,8 +152,12 @@ object BookScanner {
             r.points(p)
             quad = p
         }
-        val scaled = quad.map { Point(it.x / scale, it.y / scale) }.toTypedArray()
-        return orderPoints(scaled)
+        // xấp xỉ 4 đỉnh hay "ăn" vào góc -> mở rộng để bao trọn toàn bộ đường viền
+        val ordered = orderPoints(quad)
+        val maxShift = 0.15 * hypot(small.cols().toDouble(), small.rows().toDouble())
+        val enclosing = enclosingQuad(ordered, hull, maxShift)
+        val scaled = enclosing.map { Point(it.x / scale, it.y / scale) }.toTypedArray()
+        return scaled
     }
 
     /** trả về [tl, tr, br, bl] */
@@ -163,6 +167,31 @@ object BookScanner {
         val tr = p.minByOrNull { it.y - it.x }!!
         val bl = p.maxByOrNull { it.y - it.x }!!
         return arrayOf(tl, tr, br, bl)
+    }
+
+    /** Dịch 4 cạnh ra ngoài tới khi mọi điểm của hull nằm trong, rồi giao các cạnh lại thành 4 góc mới. */
+    private fun enclosingQuad(q: Array<Point>, hull: Array<Point>, maxShift: Double): Array<Point> {
+        val a = DoubleArray(4); val b = DoubleArray(4); val c = DoubleArray(4)
+        for (i in 0 until 4) {
+            val p = q[i]; val r = q[(i + 1) % 4]
+            val dx = r.x - p.x; val dy = r.y - p.y
+            val len = hypot(dx, dy)
+            if (len < 1e-6) return q
+            val nx = dy / len; val ny = -dx / len   // pháp tuyến hướng ra ngoài (tl->tr->br->bl)
+            var cc = nx * p.x + ny * p.y
+            for (h in hull) cc = max(cc, nx * h.x + ny * h.y)
+            a[i] = nx; b[i] = ny; c[i] = cc
+        }
+        val out = Array(4) { q[it] }
+        for (i in 0 until 4) {
+            val j = (i + 3) % 4 // cạnh kết thúc tại góc i
+            val det = a[j] * b[i] - a[i] * b[j]
+            if (abs(det) < 1e-6) continue
+            val x = (c[j] * b[i] - c[i] * b[j]) / det
+            val y = (a[j] * c[i] - a[i] * c[j]) / det
+            if (hypot(x - q[i].x, y - q[i].y) <= maxShift) out[i] = Point(x, y)
+        }
+        return out
     }
 
     private fun warp(bgr: Mat, q: Array<Point>): Mat {
@@ -202,31 +231,19 @@ object BookScanner {
         return if (bv > 0.97f * median) w / 2 else bi
     }
 
-    // ---------- 3. làm sạch trang ----------
+    // ---------- 3. làm sạch trang -> đen trắng ----------
     private fun cleanPage(page: Mat, opt: ScanOptions): Mat {
-        val ix = (page.cols() * 0.015).toInt()
-        val iy = (page.rows() * 0.015).toInt()
+        val pxPerCm = page.cols() / opt.pageWidthCm
+        val ix = (page.cols() * 0.008).toInt()
+        val iy = (page.rows() * 0.008).toInt()
         val roi = page.submat(iy, page.rows() - iy, ix, page.cols() - ix).clone()
 
-        val color = opt.mode == OutMode.COLOR
-        val flat: Mat
-        if (color) {
-            val chs = ArrayList<Mat>()
-            Core.split(roi, chs)
-            val f = chs.map { flatten(it) }
-            flat = Mat()
-            Core.merge(f, flat)
-        } else {
-            val g = Mat()
-            Imgproc.cvtColor(roi, g, Imgproc.COLOR_BGR2GRAY)
-            flat = flatten(g)
-        }
+        val g = Mat()
+        Imgproc.cvtColor(roi, g, Imgproc.COLOR_BGR2GRAY)
         roi.release()
+        val flat = flatten(g)
 
-        val grayForLevels = if (color) {
-            val g = Mat(); Imgproc.cvtColor(flat, g, Imgproc.COLOR_BGR2GRAY); g
-        } else flat
-        val lo = min(percentile(grayForLevels, 0.01), 110)
+        val lo = min(percentile(flat, 0.01), 110)
         val hi = 235
         val lut = Mat(1, 256, CvType.CV_8U)
         val tab = ByteArray(256) { i ->
@@ -234,20 +251,75 @@ object BookScanner {
             (255 * t).toInt().toByte()
         }
         lut.put(0, 0, tab)
-        var res = Mat()
-        Core.LUT(flat, lut, res)
-
-        if (opt.mode == OutMode.BW) {
-            val bw = Mat()
-            Imgproc.threshold(res, bw, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
-            res = bw
-        }
+        var gray = Mat()
+        Core.LUT(flat, lut, gray)
 
         if (opt.deskew) {
-            val ang = estimateSkew(res)
-            if (abs(ang) > 0.15) res = rotate(res, ang)
+            val ang = estimateSkew(gray)
+            if (abs(ang) > 0.15) gray = rotate(gray, ang)
         }
-        return res
+
+        val bw = Mat()
+        Imgproc.threshold(gray, bw, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
+
+        return cropToContent(bw, (opt.marginCm * pxPerCm).toInt().coerceAtLeast(0))
+    }
+
+    /**
+     * Bỏ các mảng đen chạm mép ảnh (bóng bàn/mép giấy), tìm khung nội dung,
+     * rồi cắt khung đó cộng thêm lề [marginPx]; chỗ thiếu được đệm trắng.
+     */
+    private fun cropToContent(bw: Mat, marginPx: Int): Mat {
+        val W = bw.cols(); val H = bw.rows()
+        val ink = Mat()
+        Core.bitwise_not(bw, ink)
+        val labels = Mat(); val stats = Mat(); val cents = Mat()
+        Imgproc.connectedComponentsWithStats(ink, labels, stats, cents, 8, CvType.CV_32S)
+        val n = stats.rows()
+        val st = IntArray(n * 5)
+        stats.get(0, 0, st)
+
+        val minArea = max(8, (W.toLong() * H * 3e-6).toInt())
+        val lefts = ArrayList<Int>(); val tops = ArrayList<Int>()
+        val rights = ArrayList<Int>(); val bottoms = ArrayList<Int>()
+        val remove = ArrayList<Int>()
+        for (i in 1 until n) {
+            val l = st[i * 5]; val t = st[i * 5 + 1]
+            val w = st[i * 5 + 2]; val h = st[i * 5 + 3]; val a = st[i * 5 + 4]
+            val touches = l <= 1 || t <= 1 || l + w >= W - 1 || t + h >= H - 1
+            if (touches) remove.add(i)
+            else if (a >= minArea) {
+                lefts.add(l); tops.add(t); rights.add(l + w); bottoms.add(t + h)
+            }
+        }
+        if (remove.isNotEmpty()) {
+            val m = Mat()
+            for (id in remove.take(300)) {
+                Core.compare(labels, Scalar(id.toDouble()), m, Core.CMP_EQ)
+                bw.setTo(Scalar(255.0), m)
+            }
+            m.release()
+        }
+        ink.release(); labels.release(); stats.release(); cents.release()
+
+        if (lefts.size < 5) return bw
+
+        val q = (lefts.size * 0.005).toInt()
+        val left = lefts.sorted()[q]
+        val top = tops.sorted()[q]
+        val right = rights.sorted()[rights.size - 1 - q]
+        val bottom = bottoms.sorted()[bottoms.size - 1 - q]
+
+        val m = marginPx
+        val padded = Mat()
+        Core.copyMakeBorder(bw, padded, m, m, m, m, Core.BORDER_CONSTANT, Scalar(255.0))
+        // toạ độ trong ảnh đệm = toạ độ gốc + m
+        val x0 = left
+        val y0 = top
+        val x1 = min(padded.cols(), right + 2 * m)
+        val y1 = min(padded.rows(), bottom + 2 * m)
+        if (x1 - x0 < 50 || y1 - y0 < 50) return bw
+        return padded.submat(y0, y1, x0, x1).clone()
     }
 
     /** chia ảnh cho nền (ước lượng bằng dilate) để xoá bóng và làm trắng giấy */
@@ -284,10 +356,7 @@ object BookScanner {
     }
 
     // ---------- 4. chỉnh nghiêng ----------
-    private fun estimateSkew(img: Mat): Double {
-        val g = if (img.channels() == 1) img else {
-            val t = Mat(); Imgproc.cvtColor(img, t, Imgproc.COLOR_BGR2GRAY); t
-        }
+    private fun estimateSkew(g: Mat): Double {
         val sc = 500.0 / g.cols()
         val small = Mat()
         Imgproc.resize(g, small, Size(), sc, sc, Imgproc.INTER_AREA)
@@ -319,7 +388,7 @@ object BookScanner {
         val m = Imgproc.getRotationMatrix2D(Point(img.cols() / 2.0, img.rows() / 2.0), angle, 1.0)
         val out = Mat()
         Imgproc.warpAffine(img, out, m, img.size(), Imgproc.INTER_CUBIC,
-            Core.BORDER_CONSTANT, Scalar(255.0, 255.0, 255.0))
+            Core.BORDER_CONSTANT, Scalar(255.0))
         return out
     }
 }
