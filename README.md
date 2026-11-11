@@ -17,3 +17,26 @@ Build cục bộ: Android Studio mở thư mục này, hoặc `gradle assembleDe
 - minSdk 29 (Android 10+), dùng OpenCV 4.9.0 từ Maven Central.
 - Sách xoay dọc trong ảnh: chọn "Luôn tách đôi" (app tự xoay 90°).
 - Nền quanh sách có vật sáng dính vào sách làm sai viền: bỏ tick "Tự phát hiện viền" rồi chụp sát sách.
+
+## Thuật toán tách trang v2 (dùng kích thước thật của sách)
+
+Nhập **rộng × cao của sách mở (cm)**, chụp bằng camera **ngang**, sách nằm ngang (trang trái – gáy – trang phải).
+
+1. Tìm khối chữ thân văn bản → 4 đường biên khối chữ (bao lồi).
+2. Từ kích thước sách suy ra px/cm và vị trí dự đoán mép giấy (biên chữ + lề điển hình).
+3. Mỗi cạnh "bắt dính" vào mép giấy thật (bước nhảy sáng/tối nhiều tỉ lệ + sắc độ giấy so với nền, RANSAC); cạnh không đủ tin cậy giữ vị trí dự đoán; mọi nét chữ luôn nằm trong khung.
+4. Nắn tạm cả sách để dò gáy (bóng gáy + khoảng trống chữ, dò riêng nửa trên/nửa dưới), chiếu đường gáy về ảnh gốc, rồi tách 2 bước: **(1) cắt thô từng trang kèm nền** (tứ giác mép ngoài + đường gáy, nới 1,5 cm ra ngoài); **(2) từng trang tự dò lại 3 mép ngoài** (trên/dưới/ngoài) rồi nắn bằng **homography riêng** về chữ nhật đúng 1/2 bề rộng × chiều cao nhập vào. Sau đó mới xử lý riêng từng trang (xoá bóng, đen trắng, chỉnh nghiêng, cắt theo nội dung).
+5. Ảnh JPEG ghi DPI thật; PDF có đúng kích thước cm.
+
+Không thấy chữ (trang trống) → tự dùng thuật toán cũ làm dự phòng.
+
+**Kiểm định**: `tools/prototype` (Python/OpenCV) sinh ảnh tổng hợp có đáp án (camera nghiêng/xoay, nền gỗ/vải/tối/sáng, trang cong, gáy mờ, trang trống) và đo sai số góc (mm), chữ bị cắt, chữ lấn sang trang bên kia: `python3 run2.py 90 777`, `python3 stress.py`.
+Kết quả: sai số góc trung bình ≈ 6 mm (thuật toán cũ ≈ 180 mm), 0 ca cắt vào chữ; 2/90 ca nghiêng cực đoan trên nền vải/gỗ còn lẹm nhẹ sang trang bên kia.
+
+**Ghép lại:** tuỳ chọn "Xử lý riêng từng trang rồi ghép lại thành 1 ảnh 2 trang" – mỗi trang được xử lý độc lập (xoá bóng, đen trắng, chỉnh nghiêng, cắt nội dung) rồi ghép cạnh nhau cùng tỉ lệ px/cm.
+
+## Bản chạy trên PC (HTML)
+`web/quet_sach.html` – mở bằng Chrome/Edge, chọn thư mục ảnh; xử lý hoàn toàn trên máy, không cần mạng. Lõi thuật toán thuần JS ở `web/core.js` (build: `python3 web/build.py`). Ảnh xử lý theo thứ tự tự nhiên của tên file, đánh số trang liên tục, xuất ZIP/PDF.
+
+## GitHub Actions
+Mỗi lần push lên main/master, workflow `Build APK + Web` tự build APK và `quet_sach.html`, rồi cập nhật Releases → **Bản mới nhất** (tải APK + HTML ở đó, không cần vào Actions). Push tag `v1.0` để tạo bản phát hành chính thức. Cũng có thể chạy tay: tab Actions → Run workflow.

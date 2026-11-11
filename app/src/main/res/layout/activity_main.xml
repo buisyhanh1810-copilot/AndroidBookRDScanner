@@ -88,10 +88,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Kích thước SÁCH MỞ (2 trang, đo bằng thước), cm – camera ngang"
+            android:textStyle="bold" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -104,14 +110,14 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Rộng 1 trang sách (cm)" />
+                    android:text="Rộng cả 2 trang (cm)" />
 
                 <EditText
-                    android:id="@+id/etPageW"
+                    android:id="@+id/etSpreadW"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="numberDecimal"
-                    android:text="15" />
+                    android:text="30" />
             </LinearLayout>
 
             <LinearLayout
@@ -124,16 +130,29 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Lề dư quanh nội dung (cm)" />
+                    android:text="Cao (cm)" />
 
                 <EditText
-                    android:id="@+id/etMargin"
+                    android:id="@+id/etSpreadH"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="numberDecimal"
-                    android:text="1" />
+                    android:text="21" />
             </LinearLayout>
         </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Lề dư quanh nội dung (cm)" />
+
+        <EditText
+            android:id="@+id/etMargin"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="numberDecimal"
+            android:text="0.5" />
 
         <CheckBox
             android:id="@+id/cbCrop"
@@ -148,6 +167,12 @@
             android:layout_height="wrap_content"
             android:checked="true"
             android:text="Tự chỉnh nghiêng dòng chữ" />
+
+        <CheckBox
+            android:id="@+id/cbMerge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Xử lý riêng từng trang rồi ghép lại thành 1 ảnh 2 trang" />
 
         <Button
             android:id="@+id/btnPdf"

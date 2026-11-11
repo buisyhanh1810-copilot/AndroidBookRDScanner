@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quét sách – tách trang</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#1c2330;--mut:#667085;--card:#fff;--bd:#d9dee7;--ac:#2563eb;--ac2:#1d4ed8;--ok:#15803d;--er:#b91c1c}
+@media (prefers-color-scheme:dark){:root{--bg:#12161d;--fg:#e6e9ef;--mut:#9aa4b5;--card:#1a202b;--bd:#2c3546;--ac:#4f8cff;--ac2:#3b78ec;--ok:#4ade80;--er:#f87171}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}p.sub{margin:0 0 16px;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+label{display:flex;flex-direction:column;font-size:13px;color:var(--mut);gap:4px}
+input[type=number],input[type=text],select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;min-width:110px}
+label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg);font-size:14px}
+button,.btn{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 16px;background:var(--ac);color:#fff;cursor:pointer}
+button:hover,.btn:hover{background:var(--ac2)}button:disabled{opacity:.5;cursor:default}
+button.sec,.btn.sec{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+input[type=file]{display:none}
+#status{color:var(--mut);margin:8px 0;min-height:22px}#status.err{color:var(--er)}
+progress{width:100%;height:10px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.pg{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:8px;font-size:12px}
+.pg img{width:100%;display:block;background:#fff;border-radius:4px;border:1px solid var(--bd)}
+.pg .nm{margin-top:6px;word-break:break-all}.pg .src{color:var(--mut)}.pg a{color:var(--ac)}
+.warn{color:var(--er)}
+small{color:var(--mut)}
+</style>
+</head>
+<body>
+<main>
+<h1>Quét sách – tách trang</h1>
+<p class="sub">Chọn thư mục (hoặc nhiều ảnh) chụp sách mở 2 trang. Ảnh xử lý ngay trên máy bạn, không tải lên mạng. Ảnh được xử lý theo thứ tự tự nhiên của tên file (img2 trước img10) và đánh số trang liên tục.</p>
+
+<div class="card">
+  <div class="row">
+    <button id="bDir">Chọn thư mục ảnh…</button>
+    <button id="bFiles" class="sec">Chọn các ảnh…</button>
+    <input id="fDir" type="file" webkitdirectory directory multiple>
+    <input id="fFiles" type="file" accept="image/*" multiple>
+    <span id="count" class="sub" style="margin:0"></span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <label>Khổ giấy (1 trang)
+      <select id="preset">
+        <option value="18,26">18 × 26 cm</option>
+        <option value="21,29.7">A4 – 21 × 29,7</option>
+        <option value="14.8,21">A5 – 14,8 × 21</option>
+        <option value="10.5,14.8">A6 – 10,5 × 14,8</option>
+        <option value="17.6,25">B5 (ISO) – 17,6 × 25</option>
+        <option value="18.2,25.7">B5 (JIS) – 18,2 × 25,7</option>
+        <option value="16,24">16 × 24 cm</option>
+        <option value="14.5,20.5">14,5 × 20,5 cm</option>
+        <option value="13,19">13 × 19 cm</option>
+        <option value="12,18">12 × 18 cm</option>
+        <option value="21.6,27.9">Letter – 21,6 × 27,9</option>
+        <option value="custom">Tuỳ chọn…</option>
+      </select></label>
+    <label>Rộng 1 trang, cm<input id="pw" type="number" step="0.1" min="5" max="60" value="18"></label>
+    <label>Cao 1 trang, cm<input id="ph" type="number" step="0.1" min="5" max="80" value="26"></label>
+    <span id="spreadInfo" class="sub" style="margin:0 0 8px">Sách mở: 36 × 26 cm</span>
+    <label>Kiểu ảnh ra
+      <select id="mode"><option value="bw">Đen trắng</option><option value="gray">Xám (xoá bóng)</option><option value="color">Màu (chỉ nắn phẳng)</option></select></label>
+    <label>Xoay ảnh gốc
+      <select id="rot"><option value="0">Giữ nguyên (theo EXIF)</option><option value="90">Xoay 90° phải</option><option value="180">Xoay 180°</option><option value="270">Xoay 90° trái</option></select></label>
+    <label>Lề dư quanh nội dung, cm<input id="mg" type="number" step="0.1" min="0" max="5" value="0.5"></label>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <label class="chk"><input id="crop" type="checkbox" checked> Cắt theo nội dung + lề (tắt = giữ đúng khổ trang)</label>
+    <label class="chk"><input id="desk" type="checkbox" checked> Tự chỉnh nghiêng dòng chữ</label>
+    <label class="chk"><input id="merge" type="checkbox"> Xử lý riêng từng trang rồi ghép lại thành 1 ảnh 2 trang</label>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <label>Tiền tố tên file<input id="pre" type="text" value="trang_"></label>
+    <label>Đánh số bắt đầu từ<input id="start" type="number" min="0" value="1"></label>
+    <label>Định dạng<select id="fmt"><option value="jpg">JPEG</option><option value="png">PNG</option></select></label>
+  </div>
+  <p><small>Chọn khổ giấy của 1 trang (đo bằng thước hoặc chọn khổ có sẵn); sách mở = 2 × chiều rộng. Giả định: camera nằm ngang, sách mở nằm ngang trong khung (trang trái – gáy – trang phải), chụp đủ cả 4 mép. Ảnh bị ngược thì chọn “Xoay 180°”. Khi không tìm thấy chữ (trang trống) ảnh được cắt đôi ở giữa và đánh dấu cảnh báo.</small></p>
+  <div class="row" style="margin-top:10px">
+    <button id="bOut" class="sec">Chọn thư mục gốc để lưu…</button>
+    <span id="outName" class="sub" style="margin:0">Chưa chọn – kết quả chỉ hiện bên dưới, tải bằng ZIP/PDF</span>
+  </div>
+  <p><small>Với Chrome/Edge: chọn thư mục ảnh bằng nút đầu tiên thì thư mục đó thành thư mục gốc; mỗi lần xử lý tự tạo thư mục con mới 01, 02, … trong đó và ghi từng trang vào ngay khi xong. Cũng có thể chọn riêng một thư mục gốc khác ở nút này.</small></p>
+  <div class="row"><button id="go" disabled>Xử lý</button><button id="stop" class="sec" disabled>Dừng</button></div>
+</div>
+
+<div id="status"></div><progress id="prog" value="0" max="1" hidden></progress>
+
+<div class="card" id="outbar" hidden>
+  <div class="row"><b id="total"></b><button id="saveAll">Lưu tất cả vào thư mục…</button><button id="zip" class="sec">Tải tất cả (ZIP)</button><button id="pdf" class="sec">Tải PDF (đúng khổ cm)</button><button id="clear" class="sec">Xoá kết quả</button></div>
+</div>
+<div id="grid"></div>
+</main>
+
+<script>
+/*__CORE__*/
+</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+let files = [], results = [], running = false, stopFlag = false;
+const coll = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+const IMG = /\.(jpe?g|png|webp|bmp|gif|avif)$/i;
+const yieldUI = () => new Promise(r => setTimeout(r, 0));
+const say = (t, err) => { $('status').textContent = t; $('status').className = err ? 'err' : ''; };
+
+// lưu cài đặt
+const KEYS = ['preset', 'pw', 'ph', 'mode', 'rot', 'mg', 'pre', 'start', 'fmt'], CK = ['crop', 'desk', 'merge'];
+try { const s = JSON.parse(localStorage.getItem('bookscan3') || '{}'); KEYS.forEach(k => { if (s[k] != null) $(k).value = s[k]; }); CK.forEach(k => { if (s[k] != null) $(k).checked = s[k]; }); } catch (e) {}
+const save = () => { try { const s = {}; KEYS.forEach(k => s[k] = $(k).value); CK.forEach(k => s[k] = $(k).checked); localStorage.setItem('bookscan3', JSON.stringify(s)); } catch (e) {} };
+
+const syncSize = fromPreset => {
+  if (fromPreset && $('preset').value !== 'custom') { const [w, h] = $('preset').value.split(','); $('pw').value = w; $('ph').value = h; }
+  else if (!fromPreset) { const v = `${+$('pw').value},${+$('ph').value}`; const has = [...$('preset').options].some(o => o.value === v); $('preset').value = has ? v : 'custom'; }
+  $('spreadInfo').textContent = `Sách mở: ${(+$('pw').value * 2).toFixed(1).replace(/\.0$/, '')} × ${+$('ph').value} cm (2 trang cạnh nhau, camera ngang)`;
+};
+$('preset').onchange = () => syncSize(true); $('pw').oninput = $('ph').oninput = () => syncSize(false); syncSize(false);
+// ----- thư mục gốc + tự tạo thư mục con mới (01, 02, …) để lưu kết quả -----
+let rootDir = null, outDir = null;
+const canDir = typeof window.showDirectoryPicker === 'function';
+async function nextSubfolder(root) {
+  const used = new Set(); for await (const [n] of root.entries()) used.add(n);
+  let i = 1, name; do { name = String(i++).padStart(2, '0'); } while (used.has(name));
+  return { name, handle: await root.getDirectoryHandle(name, { create: true }) };
+}
+async function writeTo(dir, name, blob) { const fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(blob); await w.close(); }
+async function pickRoot() {
+  if (!canDir) { say('Trình duyệt này không hỗ trợ tự lưu vào thư mục – hãy dùng Chrome/Edge, hoặc tải ZIP.', true); return null; }
+  try { rootDir = await window.showDirectoryPicker({ mode: 'readwrite' }); return rootDir; }
+  catch (e) { if (e && e.name !== 'AbortError') say('Không mở được thư mục: ' + (e.message || e), true); return null; }
+}
+const rootInfo = () => { $('outName').textContent = rootDir ? `Thư mục gốc: ${rootDir.name} – mỗi lần xử lý tự tạo thư mục con mới (01, 02, …) để lưu` : 'Chưa chọn – kết quả chỉ hiện bên dưới, tải bằng ZIP/PDF'; };
+$('bOut').onclick = async () => { if (await pickRoot()) rootInfo(); };
+async function pickSourceDir() { // chọn thư mục ảnh bằng quyền đọc+ghi: vừa đọc ảnh vừa là thư mục gốc để lưu
+  const d = await pickRoot(); if (!d) return;
+  const list = []; for await (const [n, h] of d.entries()) if (h.kind === 'file' && IMG.test(n)) list.push(await h.getFile());
+  setFiles(list); rootInfo();
+}
+$('bDir').onclick = () => { if (canDir) pickSourceDir(); else $('fDir').click(); };
+$('bFiles').onclick = () => $('fFiles').click();
+function setFiles(list) {
+  files = [...list].filter(f => IMG.test(f.name) || /^image\//.test(f.type)).sort((a, b) => coll.compare(a.webkitRelativePath || a.name, b.webkitRelativePath || b.name));
+  $('count').textContent = files.length ? `${files.length} ảnh – thứ tự: ${files[0].name} … ${files[files.length - 1].name}` : 'Không có ảnh hợp lệ';
+  $('go').disabled = !files.length;
+}
+$('fDir').onchange = e => setFiles(e.target.files);
+$('fFiles').onchange = e => setFiles(e.target.files);
+
+// Đọc EXIF orientation + kích thước thật từ đầu file JPEG (không phụ thuộc trình duyệt xử lý EXIF thế nào)
+async function jpegInfo(file) {
+  const r = { o: 1, w: 0, h: 0 };
+  try {
+    const d = new DataView(await file.slice(0, 262144).arrayBuffer());
+    if (d.getUint16(0) !== 0xFFD8) return r;
+    let p = 2;
+    while (p + 4 < d.byteLength) {
+      if (d.getUint8(p) !== 0xFF) break;
+      const m = d.getUint8(p + 1), len = d.getUint16(p + 2);
+      if (m === 0xE1 && d.getUint32(p + 4) === 0x45786966) { // "Exif"
+        const t = p + 10, le = d.getUint16(t) === 0x4949, g16 = o => d.getUint16(t + o, le), g32 = o => d.getUint32(t + o, le);
+        const ifd = g32(4), n = g16(ifd);
+        for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (g16(e) === 0x0112) { r.o = g16(e + 8); break; } }
+      } else if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) { r.h = d.getUint16(p + 5); r.w = d.getUint16(p + 7); break; }
+      p += 2 + len;
+    }
+  } catch (e) {}
+  return r;
+}
+async function decodeBitmap(file) {
+  // 'none' hợp lệ ở mọi phiên bản; nếu không được thì thử không tham số, cuối cùng dùng thẻ <img>
+  for (const opt of [{ imageOrientation: 'none' }, undefined]) {
+    try { if (window.createImageBitmap) return await createImageBitmap(file, opt); } catch (e) {}
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const im = new Image(); im.src = url; await im.decode();
+    return { width: im.naturalWidth, height: im.naturalHeight, _img: im, close() {} };
+  } finally { setTimeout(() => URL.revokeObjectURL(url), 10000); }
+}
+async function loadImage(file, rot, maxSide = 3000) {
+  const info = await jpegInfo(file), src = await decodeBitmap(file), draw = src._img || src;
+  let o = info.o || 1;
+  // trình duyệt đã tự xoay theo EXIF chưa? (so sánh kích thước ảnh giải mã với kích thước thật trong file)
+  if (o >= 5 && info.w && info.h && src.width === info.h && src.height === info.w) o = 1;
+  let w = src.width, h = src.height; const k = Math.min(1, maxSide / Math.max(w, h)); w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
+  const sw = o >= 5, uw = sw ? h : w, uh = sw ? w : h;                  // kích thước sau khi xoay theo EXIF
+  const c1 = document.createElement('canvas'); c1.width = uw; c1.height = uh; const g1 = c1.getContext('2d', { willReadFrequently: true });
+  const T = { 1: [1, 0, 0, 1, 0, 0], 2: [-1, 0, 0, 1, w, 0], 3: [-1, 0, 0, -1, w, h], 4: [1, 0, 0, -1, 0, h], 5: [0, 1, 1, 0, 0, 0], 6: [0, 1, -1, 0, h, 0], 7: [0, -1, -1, 0, h, w], 8: [0, -1, 1, 0, 0, w] }[o] || [1, 0, 0, 1, 0, 0];
+  g1.setTransform(...T); g1.drawImage(draw, 0, 0, w, h); g1.setTransform(1, 0, 0, 1, 0, 0);
+  src.close && src.close();
+  let cv = c1, g = g1;
+  if (rot) { // xoay thêm theo lựa chọn của người dùng
+    const swap = rot === 90 || rot === 270, cw = swap ? uh : uw, ch = swap ? uw : uh;
+    cv = document.createElement('canvas'); cv.width = cw; cv.height = ch; g = cv.getContext('2d', { willReadFrequently: true });
+    g.translate(cw / 2, ch / 2); g.rotate(rot * Math.PI / 180); g.drawImage(c1, -uw / 2, -uh / 2);
+  }
+  const d = g.getImageData(0, 0, cv.width, cv.height); return { w: cv.width, h: cv.height, data: d.data };
+}
+function toCanvas(p) {
+  const cv = document.createElement('canvas'); cv.width = p.w; cv.height = p.h; const g = cv.getContext('2d'), id = g.createImageData(p.w, p.h);
+  if (p.gray) { for (let i = 0; i < p.gray.length; i++) { const v = p.gray[i]; id.data[i * 4] = v; id.data[i * 4 + 1] = v; id.data[i * 4 + 2] = v; id.data[i * 4 + 3] = 255; } } else id.data.set(p.rgba);
+  g.putImageData(id, 0, 0); return cv;
+}
+const blobOf = (cv, fmt) => new Promise(r => cv.toBlob(r, fmt === 'png' ? 'image/png' : 'image/jpeg', 0.92));
+async function withDpi(blob, ppc) { // ghi DPI vào JFIF
+  const b = new Uint8Array(await blob.arrayBuffer());
+  if (b.length > 18 && b[2] === 0xFF && b[3] === 0xE0 && b[6] === 0x4A && b[7] === 0x46 && b[8] === 0x49 && b[9] === 0x46) { const d = Math.max(1, Math.min(65535, Math.round(ppc * 2.54))); b[13] = 1; b[14] = d >> 8; b[15] = d & 255; b[16] = d >> 8; b[17] = d & 255; }
+  return new Blob([b], { type: 'image/jpeg' });
+}
+function fallbackSplit(img, o) { // không thấy chữ: cắt đôi ở giữa
+  const hw = img.w >> 1, mk = (x0, x1) => { const w = x1 - x0, d = new Uint8ClampedArray(w * img.h * 4); for (let y = 0; y < img.h; y++) d.set(img.data.subarray((y * img.w + x0) * 4, (y * img.w + x1) * 4), y * w * 4); return { w, h: img.h, data: d }; };
+  return { pages: [mk(0, hw), mk(hw, img.w)], ppc: img.w / o.spreadW };
+}
+function addCard(r) {
+  const d = document.createElement('div'); d.className = 'pg';
+  d.innerHTML = `<img alt=""><div class="nm"><b></b></div><div class="src"></div>`;
+  d.querySelector('img').src = r.url; d.querySelector('b').textContent = r.name;
+  d.querySelector('.src').textContent = `${r.src} · ${(r.w / r.ppc).toFixed(1)}×${(r.h / r.ppc).toFixed(1)} cm${r.saved ? ' · đã lưu' : ''}`;
+  if (r.warn) { const w = document.createElement('div'); w.className = 'warn'; w.textContent = r.warn; d.appendChild(w); }
+  const a = document.createElement('a'); a.href = r.url; a.download = r.name; a.textContent = 'Tải ảnh'; d.appendChild(a);
+  $('grid').appendChild(d);
+}
+async function run() {
+  save(); running = true; stopFlag = false; $('go').disabled = true; $('stop').disabled = false; $('prog').hidden = false; $('prog').max = files.length; $('prog').value = 0;
+  const o = { spreadW: 2 * (+$('pw').value || 18), spreadH: +$('ph').value || 26, mode: $('mode').value, marginCm: +$('mg').value || 0, cropContent: $('crop').checked, deskew: $('desk').checked, merge: $('merge').checked };
+  const rot = +$('rot').value, fmt = $('fmt').value, pre = $('pre').value, ext = fmt === 'png' ? 'png' : 'jpg';
+  let no = Math.max(0, parseInt($('start').value) || 0), fails = 0;
+  results.forEach(r => URL.revokeObjectURL(r.url)); results = []; $('grid').innerHTML = '';
+  outDir = null;
+  if (rootDir) { try { const sub = await nextSubfolder(rootDir); outDir = sub.handle; outDir._label = `${rootDir.name}/${sub.name}`; } catch (e) { say('Không tạo được thư mục con: ' + (e.message || e), true); } }
+  for (let i = 0; i < files.length && !stopFlag; i++) {
+    const f = files[i]; say(`Đang xử lý ${i + 1}/${files.length}: ${f.webkitRelativePath || f.name}`); await yieldUI();
+    try {
+      const img = await loadImage(f, rot); await yieldUI();
+      let out = BookCore.processImage(img, o), warn = '';
+      if (!out) { warn = 'Không tìm thấy chữ để dò viền – đã cắt đôi ở giữa'; const fb = fallbackSplit(img, o); let outs = fb.pages.map(p => BookCore.cleanPage(p, fb.ppc, o)); if (o.merge) outs = [BookCore.mergeSide(outs[0], outs[1])]; out = { outs, ppc: fb.ppc }; }
+      for (const p of out.outs) {
+        let blob = await blobOf(toCanvas(p), fmt); if (fmt !== 'png') blob = await withDpi(blob, out.ppc);
+        const name = `${pre}${String(no).padStart(4, '0')}.${ext}`; no++;
+        const r = { name, blob, url: URL.createObjectURL(blob), w: p.w, h: p.h, ppc: out.ppc, src: f.name, warn };
+        if (outDir) { try { await writeTo(outDir, name, blob); r.saved = true; } catch (e) { r.warn = (r.warn ? r.warn + '; ' : '') + 'Không ghi được vào thư mục: ' + (e.message || e); } }
+        results.push(r); addCard(r);
+      }
+    } catch (e) { fails++; console.error(e); const w = document.createElement('div'); w.className = 'pg warn'; w.textContent = `Lỗi: ${f.name} – ${e.message || e}`; $('grid').appendChild(w); }
+    $('prog').value = i + 1; await yieldUI();
+  }
+  running = false; $('go').disabled = false; $('stop').disabled = true; $('prog').hidden = true;
+  say((stopFlag ? `Đã dừng. ${results.length} trang.` : `Xong: ${results.length} trang từ ${files.length} ảnh${fails ? `, ${fails} ảnh lỗi` : ''}.`) + (outDir ? ` Đã lưu vào thư mục “${outDir._label || outDir.name}”.` : ''), !!fails);
+  $('outbar').hidden = !results.length; $('total').textContent = `${results.length} trang`;
+}
+$('go').onclick = run; $('stop').onclick = () => { stopFlag = true; };
+$('clear').onclick = () => { results.forEach(r => URL.revokeObjectURL(r.url)); results = []; $('grid').innerHTML = ''; $('outbar').hidden = true; say(''); };
+
+// ----- ZIP (không nén) -----
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+async function makeZip(items) {
+  const parts = [], cen = []; let off = 0; const enc = new TextEncoder();
+  const u16 = v => new Uint8Array([v & 255, v >> 8 & 255]), u32 = v => new Uint8Array([v & 255, v >> 8 & 255, v >> 16 & 255, v >>> 24]);
+  const cat = a => { let n = 0; a.forEach(x => n += x.length); const o = new Uint8Array(n); let p = 0; a.forEach(x => { o.set(x, p); p += x.length; }); return o; };
+  for (const it of items) {
+    const data = new Uint8Array(await it.blob.arrayBuffer()), nm = enc.encode(it.name), crc = crc32(data);
+    const lh = cat([u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(nm.length), u16(0), nm]);
+    parts.push(lh, data);
+    cen.push(cat([u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(nm.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(off), nm]));
+    off += lh.length + data.length;
+  }
+  const cd = cat(cen); parts.push(cd, cat([u32(0x06054b50), u16(0), u16(0), u16(items.length), u16(items.length), u32(cd.length), u32(off), u16(0)]));
+  return new Blob(parts, { type: 'application/zip' });
+}
+// ----- PDF (ảnh JPEG, khổ trang đúng cm) -----
+async function makePdf(items) {
+  const enc = new TextEncoder(), chunks = [], offs = []; let pos = 0;
+  const push = x => { const b = typeof x === 'string' ? enc.encode(x) : x; chunks.push(b); pos += b.length; };
+  const obj = (n, f) => { offs[n] = pos; push(`${n} 0 obj\n`); f(); push('\nendobj\n'); };
+  push('%PDF-1.4\n'); const n = items.length;
+  obj(1, () => push('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2, () => push(`<< /Type /Pages /Count ${n} /Kids [${items.map((_, i) => `${3 + i * 3} 0 R`).join(' ')}] >>`));
+  for (let i = 0; i < n; i++) {
+    const it = items[i]; let jb = it.blob; if (jb.type !== 'image/jpeg') { const bmp = await createImageBitmap(jb), cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height; cv.getContext('2d').drawImage(bmp, 0, 0); jb = await blobOf(cv, 'jpg'); }
+    const data = new Uint8Array(await jb.arrayBuffer()), pw = it.w / it.ppc / 2.54 * 72, ph = it.h / it.ppc / 2.54 * 72, c = `q ${pw.toFixed(2)} 0 0 ${ph.toFixed(2)} 0 0 cm /Im0 Do Q`;
+    const pn = 3 + i * 3;
+    obj(pn, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw.toFixed(2)} ${ph.toFixed(2)}] /Resources << /XObject << /Im0 ${pn + 1} 0 R >> >> /Contents ${pn + 2} 0 R >>`));
+    obj(pn + 1, () => { push(`<< /Type /XObject /Subtype /Image /Width ${it.w} /Height ${it.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${data.length} >>\nstream\n`); push(data); push('\nendstream'); });
+    obj(pn + 2, () => push(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`));
+  }
+  const xref = pos, total = 3 + n * 3; push(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for (let k = 1; k < total; k++) push(String(offs[k]).padStart(10, '0') + ' 00000 n \n');
+  push(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(chunks, { type: 'application/pdf' });
+}
+const dl = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
+$('saveAll').onclick = async () => {
+  if (!rootDir && !(await pickRoot())) return; rootInfo(); let n = 0, dir = outDir;
+  try { if (!dir) { const sub = await nextSubfolder(rootDir); dir = outDir = sub.handle; dir._label = `${rootDir.name}/${sub.name}`; } for (const r of results) { say(`Đang lưu ${++n}/${results.length}…`); await writeTo(dir, r.name, r.blob); r.saved = true; } say(`Đã lưu ${results.length} ảnh vào thư mục “${dir._label || dir.name}”.`); }
+  catch (e) { say('Lỗi khi lưu: ' + (e.message || e), true); }
+};
+$('zip').onclick = async () => { say('Đang nén…'); dl(await makeZip(results), 'cac_trang.zip'); say(`Đã tạo ZIP (${results.length} ảnh).`); };
+$('pdf').onclick = async () => { say('Đang tạo PDF…'); dl(await makePdf(results), 'cac_trang.pdf'); say(`Đã tạo PDF (${results.length} trang).`); };
+})();
+</script>
+</body>
+</html>

@@ -33,7 +33,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spSplit: Spinner
     private lateinit var cbCrop: CheckBox
     private lateinit var cbDeskew: CheckBox
-    private lateinit var etPageW: EditText
+    private lateinit var cbMerge: CheckBox
+    private lateinit var etSpreadW: EditText
+    private lateinit var etSpreadH: EditText
     private lateinit var etMargin: EditText
     private lateinit var tvStatus: TextView
     private lateinit var tvQueue: TextView
@@ -48,7 +50,7 @@ class MainActivity : AppCompatActivity() {
     private val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private var counter = 0
     private val queue = mutableListOf<Uri>()      // ảnh gốc chờ xử lý
-    private val saved = mutableListOf<Uri>()      // trang đã lưu
+    private val saved = mutableListOf<Pair<Uri, Double>>()   // trang đã lưu + px/cm
     private var camUri: Uri? = null
     private var busy = false
 
@@ -76,7 +78,9 @@ class MainActivity : AppCompatActivity() {
         spSplit = findViewById(R.id.spSplit)
         cbCrop = findViewById(R.id.cbCrop)
         cbDeskew = findViewById(R.id.cbDeskew)
-        etPageW = findViewById(R.id.etPageW)
+        cbMerge = findViewById(R.id.cbMerge)
+        etSpreadW = findViewById(R.id.etSpreadW)
+        etSpreadH = findViewById(R.id.etSpreadH)
         etMargin = findViewById(R.id.etMargin)
         tvStatus = findViewById(R.id.tvStatus)
         tvQueue = findViewById(R.id.tvQueue)
@@ -98,6 +102,10 @@ class MainActivity : AppCompatActivity() {
         btnProcess.setOnClickListener { processQueue() }
         btnClear.setOnClickListener { queue.clear(); updateQueueUi() }
         btnPdf.setOnClickListener { exportPdf() }
+        val pref = getSharedPreferences("scan", MODE_PRIVATE)
+        pref.getString("sw", null)?.let { etSpreadW.setText(it) }
+        pref.getString("sh", null)?.let { etSpreadH.setText(it) }
+        pref.getString("mg3", null)?.let { etMargin.setText(it) }
         updateQueueUi()
     }
 
@@ -105,8 +113,10 @@ class MainActivity : AppCompatActivity() {
         split = SplitMode.values()[spSplit.selectedItemPosition],
         autoCrop = cbCrop.isChecked,
         deskew = cbDeskew.isChecked,
-        pageWidthCm = (etPageW.text.toString().replace(',', '.').toDoubleOrNull() ?: 15.0).coerceIn(5.0, 60.0),
-        marginCm = (etMargin.text.toString().replace(',', '.').toDoubleOrNull() ?: 1.0).coerceIn(0.0, 5.0)
+        merge = cbMerge.isChecked,
+        spreadWcm = (etSpreadW.text.toString().replace(',', '.').toDoubleOrNull() ?: 30.0).coerceIn(10.0, 120.0),
+        spreadHcm = (etSpreadH.text.toString().replace(',', '.').toDoubleOrNull() ?: 21.0).coerceIn(10.0, 80.0),
+        marginCm = (etMargin.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.5).coerceIn(0.0, 5.0)
     )
 
     private fun addToQueue(uris: List<Uri>) {
@@ -141,10 +151,15 @@ class MainActivity : AppCompatActivity() {
     private fun processQueue() {
         if (queue.isEmpty()) return
         val opt = options()
+        getSharedPreferences("scan", MODE_PRIVATE).edit()
+            .putString("sw", etSpreadW.text.toString())
+            .putString("sh", etSpreadH.text.toString())
+            .putString("mg3", etMargin.text.toString()).apply()
         val work = queue.toList()
         setBusy(true)
         lifecycleScope.launch {
             var total = 0
+            var errors = 0
             for ((i, uri) in work.withIndex()) {
                 tvStatus.text = "Đang xử lý ảnh ${i + 1}/${work.size}…"
                 try {
@@ -154,25 +169,28 @@ class MainActivity : AppCompatActivity() {
                     queue.remove(uri)
                     updateQueueUi()
                 } catch (e: Throwable) {
+                    errors++
                     tvStatus.text = "Lỗi ở ảnh ${i + 1}: ${e.message}"
                 }
             }
-            tvStatus.text = "Xong: $total trang đã lưu vào Pictures/BookScanner"
+            tvStatus.text = "Xong: $total trang đã lưu vào Pictures/BookScanner" +
+                if (errors > 0) " ($errors ảnh lỗi, còn trong hàng đợi)" else ""
             setBusy(false)
         }
     }
 
     private fun processOne(uri: Uri, opt: ScanOptions): List<Pair<Uri, Bitmap>> {
         val bmp = Exporter.decode(this, uri)
-        val pages = BookScanner.process(bmp, opt)
+        val res = BookScanner.process(bmp, opt)
         bmp.recycle()
-        return pages.map { p ->
+        val dpi = Math.round(res.pxPerCm * 2.54).toInt()
+        return res.pages.map { p ->
             counter++
             val name = "scan_${stamp}_%03d".format(counter)
-            val u = Exporter.saveJpeg(this, p, name)
+            val u = Exporter.saveJpeg(this, p, name, dpi)
             val th = Bitmap.createScaledBitmap(p, 500, (500f * p.height / p.width).toInt().coerceAtLeast(1), true)
             p.recycle()
-            saved.add(u)
+            saved.add(u to res.pxPerCm)
             u to th
         }
     }

@@ -17,39 +17,61 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
+class ScanResult(val pages: List<Bitmap>, val pxPerCm: Double)
+
 enum class SplitMode { AUTO, ALWAYS, NEVER }
 
 data class ScanOptions(
     val split: SplitMode = SplitMode.AUTO,
     val autoCrop: Boolean = true,
     val deskew: Boolean = true,
-    val pageWidthCm: Double = 15.0,   // bề rộng thật của 1 trang sách, để đổi cm -> pixel
-    val marginCm: Double = 1.0,       // lề dư quanh nội dung
+    val spreadWcm: Double = 30.0,     // rộng thật của sách MỞ (2 trang), cm
+    val spreadHcm: Double = 21.0,     // cao thật của sách, cm
+    val marginCm: Double = 0.5,       // lề dư quanh nội dung
+    val merge: Boolean = false,       // sau khi xử lý riêng từng trang, ghép lại thành 1 ảnh 2 trang
     val maxSide: Int = 3000
 )
 
 /**
- * Ảnh chụp 2 trang -> tìm viền sách (bao trọn, không cắt góc) -> nắn phẳng -> tách theo gáy
+ * Ảnh chụp 2 trang (camera ngang, biết kích thước sách) -> tìm viền sách theo khối chữ + lề + mép giấy -> nắn phẳng -> tách theo gáy
  * -> xoá bóng -> đen trắng -> chỉnh nghiêng -> cắt theo nội dung + lề dư (mặc định 1 cm).
  */
 object BookScanner {
 
-    fun process(src: Bitmap, opt: ScanOptions): List<Bitmap> {
+    fun process(src: Bitmap, opt: ScanOptions): ScanResult {
         var img = bitmapToBgr(src)
         img = limit(img, opt.maxSide)
 
         var spread = img
+        var ppc = img.cols() / opt.spreadWcm      // px/cm (ước lượng khi không có viền)
+        var sized = false
+        var quad: Array<Point>? = null
         if (opt.autoCrop) {
-            val q = detectQuad(img)
-            if (q != null) spread = warp(img, q)
+            // Thuật toán mới: dùng kích thước thật của sách (camera ngang) -> nắn phẳng đúng tỉ lệ cm.
+            val q = try { EdgeDetector.detectQuad(img, opt.spreadWcm, opt.spreadHcm) } catch (e: Exception) { null }
+            if (q != null) {
+                val sw = warpSized(img, q, opt.spreadWcm, opt.spreadHcm)
+                spread = sw.first
+                ppc = sw.second
+                sized = true
+                quad = q
+            } else {
+                // dự phòng: không thấy chữ -> dùng bao quanh vùng sáng như bản cũ
+                val q2 = detectQuad(img)
+                if (q2 != null) {
+                    spread = warp(img, q2)
+                    ppc = spread.cols() / opt.spreadWcm
+                }
+            }
         }
 
         var ratio = spread.cols().toDouble() / spread.rows()
-        if (opt.split == SplitMode.ALWAYS && ratio < 1.0) {
+        if (!sized && opt.split == SplitMode.ALWAYS && ratio < 1.0) {
             val r = Mat()
             Core.rotate(spread, r, Core.ROTATE_90_CLOCKWISE)
             spread = r
             ratio = spread.cols().toDouble() / spread.rows()
+            ppc = spread.cols() / opt.spreadWcm
         }
         val doSplit = when (opt.split) {
             SplitMode.ALWAYS -> true
@@ -59,13 +81,36 @@ object BookScanner {
 
         val pages = ArrayList<Mat>()
         if (doSplit) {
-            val gx = findGutter(spread)
-            pages.add(spread.submat(0, spread.rows(), 0, gx))
-            pages.add(spread.submat(0, spread.rows(), gx, spread.cols()))
+            val qd = quad
+            if (sized && qd != null) {
+                // mỗi trang một phép biến đổi phối cảnh riêng: tứ giác (mép ngoài + đường gáy) -> chữ nhật
+                pages.addAll(splitSized(img, qd, spread, ppc))
+            } else {
+                val gx = findGutter(spread)
+                pages.add(spread.submat(0, spread.rows(), 0, gx))
+                pages.add(spread.submat(0, spread.rows(), gx, spread.cols()))
+            }
         } else {
             pages.add(spread)
         }
-        return pages.map { toBitmap(cleanPage(it, opt)) }
+        // xử lý RIÊNG từng trang trước (xoá bóng, đen trắng, chỉnh nghiêng, cắt theo nội dung)
+        val cleaned = pages.map { cleanPage(it, opt, ppc) }
+        val outs = if (opt.merge && cleaned.size == 2) listOf(mergeSideBySide(cleaned[0], cleaned[1])) else cleaned
+        return ScanResult(outs.map { toBitmap(it) }, ppc)
+    }
+
+    /** Ghép trang trái + trang phải (cùng px/cm) thành 1 ảnh: cao bằng nhau (đệm trắng), sát nhau như sách mở. */
+    private fun mergeSideBySide(a: Mat, b: Mat): Mat {
+        val hh = max(a.rows(), b.rows())
+        fun pad(m: Mat): Mat {
+            val top = (hh - m.rows()) / 2
+            val out = Mat()
+            Core.copyMakeBorder(m, out, top, hh - m.rows() - top, 0, 0, Core.BORDER_CONSTANT, Scalar(255.0))
+            return out
+        }
+        val out = Mat()
+        Core.hconcat(listOf(pad(a), pad(b)), out)
+        return out
     }
 
     // ---------- tiện ích ----------
@@ -209,6 +254,94 @@ object BookScanner {
         return out
     }
 
+    /**
+     * Nắn phẳng đúng tỉ lệ cm: ảnh ra rộng Sw*ppc, cao Sh*ppc (px/cm giữ ≤ 300 dpi, không phóng quá độ phân giải gốc).
+     * Trả về (ảnh, px/cm).
+     */
+    private fun warpSized(bgr: Mat, q: Array<Point>, swCm: Double, shCm: Double): Pair<Mat, Double> {
+        val tl = q[0]; val tr = q[1]; val br = q[2]; val bl = q[3]
+        val pxW = (hypot(tr.x - tl.x, tr.y - tl.y) + hypot(br.x - bl.x, br.y - bl.y)) / 2
+        val pxH = (hypot(bl.x - tl.x, bl.y - tl.y) + hypot(br.x - tr.x, br.y - tr.y)) / 2
+        val native = Math.sqrt((pxW / swCm) * (pxH / shCm))
+        val ppc = min(native, 300.0 / 2.54).coerceAtLeast(20.0)
+        val w = Math.round(swCm * ppc).toInt()
+        val h = Math.round(shCm * ppc).toInt()
+        val src = MatOfPoint2f(tl, tr, br, bl)
+        val dst = MatOfPoint2f(
+            Point(0.0, 0.0), Point(w - 1.0, 0.0), Point(w - 1.0, h - 1.0), Point(0.0, h - 1.0)
+        )
+        val m = Imgproc.getPerspectiveTransform(src, dst)
+        val out = Mat()
+        Imgproc.warpPerspective(bgr, out, m, Size(w.toDouble(), h.toDouble()),
+            Imgproc.INTER_CUBIC, Core.BORDER_REPLICATE)
+        return out to ppc
+    }
+
+    /**
+     * Tách 2 trang: BƯỚC 1 cắt thô từng trang kèm nền (tứ giác = mép ngoài + đường gáy, nới 1,5 cm ra ngoài),
+     * BƯỚC 2 từng trang tự dò lại mép giấy rồi nắn bằng homography riêng về chữ nhật.
+     * Gáy dò ở nửa trên và nửa dưới của ảnh nắn tạm rồi chiếu ngược về ảnh gốc,
+     * nên cả hai trang ra đúng cùng kích thước chữ nhật dù phối cảnh/cong làm hai nửa to nhỏ khác nhau.
+     */
+    private fun splitSized(img: Mat, q: Array<Point>, spread: Mat, ppc: Double): List<Mat> {
+        val w = spread.cols()
+        val h = spread.rows()
+        val dst = MatOfPoint2f(Point(0.0, 0.0), Point(w - 1.0, 0.0), Point(w - 1.0, h - 1.0), Point(0.0, h - 1.0))
+        val inv = Imgproc.getPerspectiveTransform(dst, MatOfPoint2f(*q))   // ảnh nắn tạm -> ảnh gốc
+        val h2 = h / 2
+        val lo = w * 0.44
+        val hi = w * 0.56
+        var xt = EdgeDetector.findCut(spread.submat(0, h2, 0, w)).x.toDouble().coerceIn(lo, hi)
+        var xb = EdgeDetector.findCut(spread.submat(h2, h, 0, w)).x.toDouble().coerceIn(lo, hi)
+        if (abs(xt - xb) > 0.04 * w) { val m = (xt + xb) / 2; xt = m; xb = m }
+        val k = (xb - xt) / (h / 2.0)
+        val gIn = MatOfPoint2f(Point(xt - k * h / 4, 0.0), Point(xb + k * h / 4, h - 1.0))
+        val gOut = MatOfPoint2f()
+        Core.perspectiveTransform(gIn, gOut, inv)
+        val g = gOut.toArray()
+        val pw = w / 2
+        val d2 = MatOfPoint2f(Point(0.0, 0.0), Point(pw - 1.0, 0.0), Point(pw - 1.0, h - 1.0), Point(0.0, h - 1.0))
+        val rough = listOf(
+            arrayOf(q[0], g[0], g[1], q[3]),    // trang trái
+            arrayOf(g[0], q[1], q[2], g[1])     // trang phải
+        )
+        val m = Math.round(1.5 * ppc).toInt()   // dư nền 1,5 cm quanh mép ngoài
+        val gm = Math.round(0.2 * ppc).toInt()  // phía gáy chỉ dư chút xíu
+        val out = ArrayList<Mat>()
+        for ((side, rq) in rough.withIndex()) {
+            // BƯỚC 1: cắt thô từng trang KÈM NỀN (nắn gần đúng, trang nằm ở khung inner trong crop)
+            val x0 = if (side == 0) m else gm
+            val cw = m + pw + gm
+            val ch = h + 2 * m
+            val dstIn = MatOfPoint2f(
+                Point(x0.toDouble(), m.toDouble()), Point(x0 + pw - 1.0, m.toDouble()),
+                Point(x0 + pw - 1.0, m + h - 1.0), Point(x0.toDouble(), m + h - 1.0)
+            )
+            val srcQ = MatOfPoint2f(*rq)
+            val mm = Imgproc.getPerspectiveTransform(srcQ, dstIn)
+            val crop = Mat()
+            Imgproc.warpPerspective(img, crop, mm, Size(cw.toDouble(), ch.toDouble()),
+                Imgproc.INTER_LINEAR, Core.BORDER_REPLICATE)
+            // BƯỚC 2: riêng trang này dò lại 3 mép ngoài (trên/dưới/ngoài) rồi nắn về chữ nhật
+            val outer = if (side == 0) setOf(0, 2, 3) else setOf(0, 1, 2)
+            val q2 = try {
+                EdgeDetector.refinePage(crop, doubleArrayOf(x0.toDouble(), m.toDouble(), (x0 + pw).toDouble(), (m + h).toDouble()), ppc, outer)
+            } catch (e: Exception) { null }
+            crop.release()
+            val finalQ: MatOfPoint2f = if (q2 != null) {
+                val back = MatOfPoint2f()
+                Core.perspectiveTransform(MatOfPoint2f(*q2), back, mm.inv())
+                back
+            } else srcQ
+            val m2 = Imgproc.getPerspectiveTransform(finalQ, d2)
+            val page = Mat()
+            Imgproc.warpPerspective(img, page, m2, Size(pw.toDouble(), h.toDouble()),
+                Imgproc.INTER_CUBIC, Core.BORDER_REPLICATE)
+            out.add(page)
+        }
+        return out
+    }
+
     // ---------- 2. rãnh gáy ----------
     private fun findGutter(spread: Mat): Int {
         val w = spread.cols()
@@ -232,8 +365,7 @@ object BookScanner {
     }
 
     // ---------- 3. làm sạch trang -> đen trắng ----------
-    private fun cleanPage(page: Mat, opt: ScanOptions): Mat {
-        val pxPerCm = page.cols() / opt.pageWidthCm
+    private fun cleanPage(page: Mat, opt: ScanOptions, pxPerCm: Double): Mat {
         val ix = (page.cols() * 0.008).toInt()
         val iy = (page.rows() * 0.008).toInt()
         val roi = page.submat(iy, page.rows() - iy, ix, page.cols() - ix).clone()
@@ -304,7 +436,7 @@ object BookScanner {
 
         if (lefts.size < 5) return bw
 
-        val q = (lefts.size * 0.005).toInt()
+        val q = min(1, (lefts.size * 0.001).toInt())
         val left = lefts.sorted()[q]
         val top = tops.sorted()[q]
         val right = rights.sorted()[rights.size - 1 - q]
