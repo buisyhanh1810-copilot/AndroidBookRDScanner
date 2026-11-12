@@ -17,13 +17,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opencv.android.OpenCVLoader
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -37,6 +35,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etSpreadW: EditText
     private lateinit var etSpreadH: EditText
     private lateinit var etMargin: EditText
+    private lateinit var etDelay: EditText
+    private lateinit var etInterval: EditText
+    private lateinit var etCount: EditText
     private lateinit var tvStatus: TextView
     private lateinit var tvQueue: TextView
     private lateinit var progress: ProgressBar
@@ -51,7 +52,6 @@ class MainActivity : AppCompatActivity() {
     private var counter = 0
     private val queue = mutableListOf<Uri>()      // ảnh gốc chờ xử lý
     private val saved = mutableListOf<Pair<Uri, Double>>()   // trang đã lưu + px/cm
-    private var camUri: Uri? = null
     private var busy = false
 
     private val pickImages =
@@ -59,12 +59,13 @@ class MainActivity : AppCompatActivity() {
             if (uris.isNotEmpty()) addToQueue(uris)
         }
 
-    // Chụp liên tục: chụp xong 1 ảnh thì mở lại camera; huỷ/quay lại để dừng.
-    private val takePicture =
-        registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-            if (ok) {
-                camUri?.let { addToQueue(listOf(it)) }
-                launchCamera()
+    // Chụp tự động định thời: CaptureActivity trả về danh sách ảnh đã chụp.
+    private val autoCapture =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+            val list = r.data?.getStringArrayListExtra(CaptureActivity.RESULT_URIS).orEmpty()
+            if (list.isNotEmpty()) {
+                addToQueue(list.map { Uri.parse(it) })
+                tvStatus.text = "Đã chụp ${list.size} ảnh, đang ở hàng đợi – bấm Xử lý."
             }
         }
 
@@ -82,6 +83,9 @@ class MainActivity : AppCompatActivity() {
         etSpreadW = findViewById(R.id.etSpreadW)
         etSpreadH = findViewById(R.id.etSpreadH)
         etMargin = findViewById(R.id.etMargin)
+        etDelay = findViewById(R.id.etDelay)
+        etInterval = findViewById(R.id.etInterval)
+        etCount = findViewById(R.id.etCount)
         tvStatus = findViewById(R.id.tvStatus)
         tvQueue = findViewById(R.id.tvQueue)
         progress = findViewById(R.id.progress)
@@ -97,7 +101,7 @@ class MainActivity : AppCompatActivity() {
             listOf("Tự động", "Luôn tách đôi", "Không tách (1 trang)")
         )
 
-        btnCamera.setOnClickListener { launchCamera() }
+        btnCamera.setOnClickListener { startAutoCapture() }
         btnPick.setOnClickListener { pickImages.launch("image/*") }
         btnProcess.setOnClickListener { processQueue() }
         btnClear.setOnClickListener { queue.clear(); updateQueueUi() }
@@ -106,6 +110,9 @@ class MainActivity : AppCompatActivity() {
         pref.getString("sw", null)?.let { etSpreadW.setText(it) }
         pref.getString("sh", null)?.let { etSpreadH.setText(it) }
         pref.getString("mg3", null)?.let { etMargin.setText(it) }
+        pref.getString("cd", null)?.let { etDelay.setText(it) }
+        pref.getString("ci", null)?.let { etInterval.setText(it) }
+        pref.getString("cc", null)?.let { etCount.setText(it) }
         updateQueueUi()
     }
 
@@ -131,12 +138,18 @@ class MainActivity : AppCompatActivity() {
         btnClear.isEnabled = !busy && queue.isNotEmpty()
     }
 
-    private fun launchCamera() {
-        val dir = File(cacheDir, "images").apply { mkdirs() }
-        val f = File(dir, "cap_${System.currentTimeMillis()}.jpg")
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-        camUri = uri
-        takePicture.launch(uri)
+    private fun startAutoCapture() {
+        val delaySec = (etDelay.text.toString().replace(',', '.').toDoubleOrNull() ?: 5.0).coerceIn(0.0, 600.0)
+        val intervalSec = (etInterval.text.toString().replace(',', '.').toDoubleOrNull() ?: 3.0).coerceIn(1.0, 3600.0)
+        val count = (etCount.text.toString().toIntOrNull() ?: 0).coerceIn(0, 100000)
+        getSharedPreferences("scan", MODE_PRIVATE).edit()
+            .putString("cd", etDelay.text.toString())
+            .putString("ci", etInterval.text.toString())
+            .putString("cc", etCount.text.toString()).apply()
+        autoCapture.launch(Intent(this, CaptureActivity::class.java)
+            .putExtra(CaptureActivity.EXTRA_DELAY, delaySec)
+            .putExtra(CaptureActivity.EXTRA_INTERVAL, intervalSec)
+            .putExtra(CaptureActivity.EXTRA_COUNT, count))
     }
 
     private fun setBusy(b: Boolean) {

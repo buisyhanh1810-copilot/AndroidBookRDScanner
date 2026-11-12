@@ -7,7 +7,7 @@ chỉnh nghiêng, cắt theo nội dung + lề dư 1 cm (chỉnh được), lưu
 ## Build bằng GitHub Actions
 1. Tạo repo mới trên GitHub, đẩy toàn bộ thư mục này lên nhánh `main`.
 2. Vào tab **Actions** → workflow **Build APK** chạy tự động (hoặc bấm *Run workflow*).
-3. Chạy xong, mở lần chạy đó → mục **Artifacts** → tải `BookScanner-debug-apk`, giải nén lấy `app-debug.apk` cài lên máy.
+3. Chạy xong, mở lần chạy đó → mục **Artifacts** → tải `BookScanner-debug-apk`, giải nén lấy file `BookScanner_Version-1.0.<số lần build>_<ngày>_<mã commit>.apk` cài lên máy (phiên bản hiển thị trong app cũng là 1.0.<số lần build>).
 4. Muốn có bản Release: `git tag v1.0 && git push --tags`, APK sẽ được đính vào Releases.
 
 Không cần Gradle wrapper: workflow dùng `gradle/actions/setup-gradle` với Gradle 8.7.
@@ -35,8 +35,8 @@ Kết quả: sai số góc trung bình ≈ 6 mm (thuật toán cũ ≈ 180 mm), 
 
 **Ghép lại:** tuỳ chọn "Xử lý riêng từng trang rồi ghép lại thành 1 ảnh 2 trang" – mỗi trang được xử lý độc lập (xoá bóng, đen trắng, chỉnh nghiêng, cắt nội dung) rồi ghép cạnh nhau cùng tỉ lệ px/cm.
 
-## Bản chạy trên PC (HTML)
-`web/quet_sach.html` – mở bằng Chrome/Edge, chọn thư mục ảnh; xử lý hoàn toàn trên máy, không cần mạng. Lõi thuật toán thuần JS ở `web/core.js` (build: `python3 web/build.py`). Ảnh xử lý theo thứ tự tự nhiên của tên file, đánh số trang liên tục, xuất ZIP/PDF.
-
 ## GitHub Actions
-Mỗi lần push lên main/master, workflow `Build APK + Web` tự build APK và `quet_sach.html`, rồi cập nhật Releases → **Bản mới nhất** (tải APK + HTML ở đó, không cần vào Actions). Push tag `v1.0` để tạo bản phát hành chính thức. Cũng có thể chạy tay: tab Actions → Run workflow.
+Mỗi lần push lên main/master, workflow `Build APK` tự build APK, rồi cập nhật Releases → **Bản mới nhất** (tải APK ở đó, không cần vào Actions). Push tag `v1.0` để tạo bản phát hành chính thức. Cũng có thể chạy tay: tab Actions → Run workflow.
+
+## Chụp tự động định thời
+Nút **Chụp tự động**: đặt *Chờ trước*, *Mỗi ảnh cách* (giây) và *Số ảnh* (0 = không giới hạn) rồi bấm. Camera trong app tự chạy và tự chụp theo giờ, không có bước OK/chụp lại. Trong lúc chụp có **Tạm dừng/Tiếp tục** và **Dừng và lưu** (hoặc bấm Back); ảnh chụp được đưa vào hàng đợi để xử lý. Màn chụp luôn nằm ngang.

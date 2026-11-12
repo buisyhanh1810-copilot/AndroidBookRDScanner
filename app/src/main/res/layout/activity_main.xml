@@ -29,7 +29,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
-                android:text="Chụp liên tục" />
+                android:text="Chụp tự động" />
 
             <Button
                 android:id="@+id/btnPick"
@@ -43,9 +43,79 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Chụp liên tục: sau mỗi ảnh camera tự mở lại; bấm Quay lại/Huỷ ở camera để dừng."
-            android:textSize="12sp" />
+            android:layout_marginTop="8dp"
+            android:text="Chụp tự động định thời (camera tự chạy, có nút Tạm dừng)"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Chờ trước (giây)"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/etDelay"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="numberDecimal"
+                    android:text="5" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Mỗi ảnh cách (giây)"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/etInterval"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="numberDecimal"
+                    android:text="3" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Số ảnh (0 = không giới hạn)"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/etCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="0" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tvQueue"
