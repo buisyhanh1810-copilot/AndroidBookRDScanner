@@ -1,4 +1,4 @@
-name: Build APK + Web
+name: Build APK
 
 on:
   push:
@@ -11,23 +11,11 @@ permissions:
   contents: write
 
 jobs:
-  web:
-    name: Bản HTML (PC)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build quet_sach.html từ core.js + app.html
-        run: python3 web/build.py
-      - name: Kiểm tra cú pháp lõi JS
-        run: node -e "require('./web/core.js'); console.log('core.js OK')"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quet_sach-html
-          path: web/quet_sach.html
-
   apk:
     name: Android APK
     runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.ver.outputs.label }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,17 +28,32 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Đặt tên phiên bản
+        id: ver
+        run: |
+          VN="1.0.${{ github.run_number }}"
+          D=$(TZ=Asia/Bangkok date +%Y-%m-%d_%Hh%M)
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "vn=$VN" >> "$GITHUB_OUTPUT"
+          echo "label=Version $VN - ngày ${D/_/ lúc } (giờ VN) - $SHA" >> "$GITHUB_OUTPUT"
+          echo "file=BookScanner_Version-${VN}_${D}_${SHA}.apk" >> "$GITHUB_OUTPUT"
+
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace -Pvc=${{ github.run_number }} -Pvn=${{ steps.ver.outputs.vn }}
+
+      - name: Đổi tên APK theo phiên bản
+        run: |
+          mkdir -p apk_out
+          cp app/build/outputs/apk/debug/*.apk "apk_out/${{ steps.ver.outputs.file }}"
 
       - uses: actions/upload-artifact@v4
         with:
           name: BookScanner-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: apk_out/*.apk
 
   release:
     name: Đăng bản tải về (Releases)
-    needs: [web, apk]
+    needs: [apk]
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     steps:
@@ -61,8 +64,7 @@ jobs:
       - name: Gom file
         run: |
           mkdir -p out
-          cp dist/quet_sach-html/quet_sach.html out/
-          cp dist/BookScanner-debug-apk/*.apk out/BookScanner-debug.apk
+          cp dist/BookScanner-debug-apk/*.apk out/
           ls -la out
 
       # Push tag v*  -> bản phát hành chính thức
@@ -72,7 +74,7 @@ jobs:
         with:
           files: out/*
 
-      # Push main/master -> luôn cập nhật bản "latest" để tải APK + HTML mới nhất ở mục Releases
+      # Push main/master -> luôn cập nhật bản "latest" để tải APK mới nhất ở mục Releases
       - name: Dời tag latest về commit mới
         if: startsWith(github.ref, 'refs/heads/')
         run: |
@@ -85,6 +87,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Bản mới nhất (tự động build)
+          name: Bản mới nhất ${{ needs.apk.outputs.label }}
           prerelease: true
           files: out/*
