@@ -25,6 +25,7 @@ data class ScanOptions(
     val split: SplitMode = SplitMode.AUTO,
     val autoCrop: Boolean = true,
     val deskew: Boolean = true,
+    val blackBoost: Double = 0.05,    // tăng độ đen ảnh BW (tỉ lệ thang 0..255)
     val spreadWcm: Double = 30.0,     // rộng thật của sách MỞ (2 trang), cm
     val spreadHcm: Double = 21.0,     // cao thật của sách, cm
     val marginCm: Double = 0.5,       // lề dư quanh nội dung
@@ -391,8 +392,12 @@ object BookScanner {
             if (abs(ang) > 0.15) gray = rotate(gray, ang)
         }
 
+        // Tăng độ đen: nâng ngưỡng Otsu thêm blackBoost (5% thang 0..255) -> nét chữ đậm hơn
+        val tmp = Mat()
+        val otsu = Imgproc.threshold(gray, tmp, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
+        tmp.release()
         val bw = Mat()
-        Imgproc.threshold(gray, bw, 0.0, 255.0, Imgproc.THRESH_BINARY or Imgproc.THRESH_OTSU)
+        Imgproc.threshold(gray, bw, min(254.0, otsu + opt.blackBoost * 255.0), 255.0, Imgproc.THRESH_BINARY)
 
         return cropToContent(bw, (opt.marginCm * pxPerCm).toInt().coerceAtLeast(0))
     }
