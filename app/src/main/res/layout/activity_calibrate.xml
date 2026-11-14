@@ -18,24 +18,28 @@
         android:orientation="horizontal">
 
         <Button
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
             android:id="@+id/btnOpen"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_marginEnd="6dp"
             android:layout_weight="1"
-            android:maxLines="1"
+            android:maxLines="2"
             android:text="Chọn ảnh mẫu"
             android:textSize="13sp" />
 
         <Button
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
             android:id="@+id/btnFirst"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_marginStart="6dp"
             android:layout_weight="1"
-            android:maxLines="1"
+            android:maxLines="2"
             android:text="Dùng ảnh đầu hàng đợi"
             android:textSize="13sp" />
     </LinearLayout>
@@ -86,22 +90,28 @@
         android:orientation="horizontal">
 
         <Button
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
             android:id="@+id/btnClearRegions"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="0dp"
-            android:layout_height="52dp"
+            android:layout_height="wrap_content"
+                    android:minHeight="52dp"
             android:layout_marginEnd="6dp"
             android:layout_weight="1"
-            android:maxLines="1"
+            android:maxLines="2"
             android:text="Xoá vùng" />
 
         <Button
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
             android:id="@+id/btnSave"
             android:layout_width="0dp"
-            android:layout_height="52dp"
+            android:layout_height="wrap_content"
+                    android:minHeight="52dp"
             android:layout_marginStart="6dp"
             android:layout_weight="2"
-            android:maxLines="1"
+            android:maxLines="2"
             android:text="Lưu hồ sơ" />
     </LinearLayout>
 </LinearLayout>
