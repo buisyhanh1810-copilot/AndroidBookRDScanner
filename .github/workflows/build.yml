@@ -31,7 +31,7 @@ jobs:
       - name: Đặt tên phiên bản
         id: ver
         run: |
-          VN="1.0.${{ github.run_number }}"
+          VN="1.1.${{ github.run_number }}"
           D=$(TZ=Asia/Bangkok date +%Y-%m-%d_%Hh%M)
           SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "vn=$VN" >> "$GITHUB_OUTPUT"
