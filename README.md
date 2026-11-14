@@ -86,3 +86,9 @@ Mô phỏng Python (sai số tổng, cm; V0 = chỉ homography → nắn dọc �
 - Áp dụng cho cả tab "Hai trang" (từng trang sau khi tách theo gáy) và tab "Một trang". Tuỳ chọn "Bám biên chính xác từng trang" (mặc định bật).
 - Mô phỏng Python (giấy phẳng, khung hạt giống lệch 6 mm/góc): sai số góc ngoài 7,2 → 4,1 mm, gáy không dịch. Ảnh thật chưa có chuẩn nên chỉ thấy lệch tỉ lệ khổ giảm 0,041 → 0,027.
 - Bám không đủ tin cậy ở cạnh nào thì giữ cạnh cũ. Chưa biên dịch/chạy trên Android.
+
+## 1.1.45 – Giữ trạng thái khi quay lại app + ghi lỗi crash
+- Khi màn hình bị Android tạo lại (ví dụ thoát ra xem ảnh rồi quay về), app khôi phục hàng đợi, danh sách trang đã lưu, bộ đếm, và dựng lại ảnh nhỏ từ các file đã lưu trong Pictures/BookScanner. Nút/trạng thái bận không còn kẹt.
+- Ảnh đang xử lý dở khi màn hình bị hủy vẫn được xử lý và lưu xong (không bị cắt ngang).
+- Nếu app bị crash, nội dung lỗi được ghi vào `crash.txt` (thư mục dữ liệu ngoài của app) và hiện ở dòng trạng thái lần mở sau; file đổi tên thành `crash_last.txt`.
+- Chưa biên dịch/chạy trên Android.

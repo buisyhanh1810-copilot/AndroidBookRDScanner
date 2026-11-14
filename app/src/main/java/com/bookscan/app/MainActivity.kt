@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnClear: Button
     private lateinit var btnPdf: Button
 
-    private val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    private var stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private var counter = 0
     private val queue = mutableListOf<Uri>()      // ảnh gốc chờ xử lý
     private val saved = mutableListOf<Pair<Uri, Double>>()   // trang đã lưu + px/cm
@@ -109,6 +109,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashLogger()
         setContentView(R.layout.activity_main)
         if (!OpenCVLoader.initLocal()) {
             Toast.makeText(this, "Không nạp được OpenCV", Toast.LENGTH_LONG).show()
@@ -284,7 +285,74 @@ class MainActivity : AppCompatActivity() {
         pref.getString("cd", null)?.let { etDelay.setText(it) }
         pref.getString("ci", null)?.let { etInterval.setText(it) }
         pref.getString("cc", null)?.let { etCount.setText(it) }
+        restoreState(savedInstanceState)
         updateQueueUi()
+        showLastCrash()
+    }
+
+    // ---- lưu/khôi phục trạng thái khi màn hình bị tạo lại (ví dụ quay lại từ trình xem ảnh) ----
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putStringArrayList("q", ArrayList(queue.map { it.toString() }))
+        outState.putStringArrayList("su", ArrayList(saved.map { it.first.toString() }))
+        outState.putDoubleArray("sp", saved.map { it.second }.toDoubleArray())
+        outState.putInt("ctr", counter)
+        outState.putString("stamp", stamp)
+    }
+
+    private fun restoreState(b: Bundle?) {
+        if (b == null) return
+        try {
+            b.getStringArrayList("q")?.forEach { queue.add(Uri.parse(it)) }
+            val su = b.getStringArrayList("su") ?: arrayListOf()
+            val sp = b.getDoubleArray("sp") ?: DoubleArray(0)
+            counter = b.getInt("ctr", 0)
+            b.getString("stamp")?.let { stamp = it }
+            for ((i, u) in su.withIndex()) saved.add(Uri.parse(u) to (sp.getOrNull(i) ?: 0.0))
+            if (saved.isNotEmpty()) {
+                tvStatus.text = "Đã khôi phục ${saved.size} trang đã lưu (trong Pictures/BookScanner)."
+                val uris = saved.map { it.first }
+                lifecycleScope.launch {
+                    for (u in uris) {
+                        val th = withContext(Dispatchers.IO) { try { loadThumb(u) } catch (e: Throwable) { null } }
+                        if (th != null) addThumb(u, th)
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            queue.clear(); saved.clear()
+        }
+    }
+
+    private fun loadThumb(u: Uri): Bitmap? {
+        val cr = contentResolver
+        val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        cr.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+        var sample = 1
+        while (o.outWidth / (sample * 2) >= 500) sample *= 2
+        val o2 = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+        return cr.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o2) }
+    }
+
+    // ---- ghi lỗi crash vào file để xem lại ở lần mở sau ----
+    private fun installCrashLogger() {
+        val prev = Thread.getDefaultUncaughtExceptionHandler()
+        val f = java.io.File(getExternalFilesDir(null) ?: filesDir, "crash.txt")
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            try { f.writeText(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()) + "\n" + android.util.Log.getStackTraceString(e)) } catch (_: Throwable) {}
+            prev?.uncaughtException(t, e)
+        }
+    }
+
+    private fun showLastCrash() {
+        try {
+            val f = java.io.File(getExternalFilesDir(null) ?: filesDir, "crash.txt")
+            if (f.exists()) {
+                val txt = f.readText()
+                f.renameTo(java.io.File(f.parentFile, "crash_last.txt"))
+                tvStatus.text = "Lần trước app bị lỗi (đã lưu ở crash_last.txt):\n" + txt.lines().take(8).joinToString("\n")
+            }
+        } catch (_: Throwable) {}
     }
 
     private val calibLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { loadProfile() }
@@ -414,7 +482,7 @@ class MainActivity : AppCompatActivity() {
             for ((i, uri) in work.withIndex()) {
                 tvStatus.text = "Đang xử lý ảnh ${i + 1}/${work.size}…"
                 try {
-                    val outs = withContext(Dispatchers.Default) { processOne(uri, opt) }
+                    val outs = withContext(Dispatchers.Default + kotlinx.coroutines.NonCancellable) { processOne(uri, opt) }
                     for ((u, th) in outs) addThumb(u, th)
                     total += outs.size
                     lastNote?.let { if (it.isNotBlank()) notes.add("Ảnh ${i + 1}: $it") }

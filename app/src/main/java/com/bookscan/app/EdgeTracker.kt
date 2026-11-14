@@ -13,7 +13,6 @@ import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -133,6 +132,7 @@ object EdgeTracker {
         val inv = mm.inv()
         val back = MatOfPoint2f()
         Core.perspectiveTransform(MatOfPoint2f(*q2), back, inv)
+        inv.release()
         val b = back.toArray()
         if (skipSide != null) {
             b[skipSide] = rough[skipSide]
