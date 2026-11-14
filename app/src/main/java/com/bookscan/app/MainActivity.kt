@@ -12,6 +12,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -32,8 +33,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cbCrop: CheckBox
     private lateinit var cbDeskew: CheckBox
     private lateinit var cbMerge: CheckBox
-    private lateinit var etSpreadW: EditText
-    private lateinit var etSpreadH: EditText
+    private lateinit var spOutput: Spinner
+    private lateinit var spRotate: Spinner
+    private lateinit var cbCurve: CheckBox
+    private lateinit var spCalib: Spinner
+    private lateinit var btnCalib: Button
+    private lateinit var tvCalib: TextView
+    private var profile: ColorProfile? = null
+    private lateinit var tvVersion: TextView
+    private lateinit var sbInk: SeekBar
+    private lateinit var tvInk: TextView
+    private lateinit var inkBox: View
+    private lateinit var spPaper: Spinner
+    private lateinit var etPageW: EditText
+    private lateinit var etPageH: EditText
+    private lateinit var tvSpread: TextView
+    private var settingPreset = false
+
+    // Khổ giấy chuẩn: tên, rộng, cao (cm) của MỘT trang. Mục cuối là tuỳ chỉnh.
+    private val papers = listOf(
+        Triple("A4", 21.0, 29.7), Triple("A5", 14.8, 21.0), Triple("A3", 29.7, 42.0),
+        Triple("B5 (ISO)", 17.6, 25.0), Triple("B4 (ISO)", 25.0, 35.3),
+        Triple("Letter", 21.59, 27.94), Triple("Legal", 21.59, 35.56),
+        Triple("Tuỳ chỉnh", 0.0, 0.0)
+    )
     private lateinit var etMargin: EditText
     private lateinit var etDelay: EditText
     private lateinit var etInterval: EditText
@@ -80,8 +103,20 @@ class MainActivity : AppCompatActivity() {
         cbCrop = findViewById(R.id.cbCrop)
         cbDeskew = findViewById(R.id.cbDeskew)
         cbMerge = findViewById(R.id.cbMerge)
-        etSpreadW = findViewById(R.id.etSpreadW)
-        etSpreadH = findViewById(R.id.etSpreadH)
+        spOutput = findViewById(R.id.spOutput)
+        spRotate = findViewById(R.id.spRotate)
+        cbCurve = findViewById(R.id.cbCurve)
+        spCalib = findViewById(R.id.spCalib)
+        btnCalib = findViewById(R.id.btnCalib)
+        tvCalib = findViewById(R.id.tvCalib)
+        tvVersion = findViewById(R.id.tvVersion)
+        sbInk = findViewById(R.id.sbInk)
+        tvInk = findViewById(R.id.tvInk)
+        inkBox = findViewById(R.id.inkBox)
+        spPaper = findViewById(R.id.spPaper)
+        etPageW = findViewById(R.id.etPageW)
+        etPageH = findViewById(R.id.etPageH)
+        tvSpread = findViewById(R.id.tvSpread)
         etMargin = findViewById(R.id.etMargin)
         etDelay = findViewById(R.id.etDelay)
         etInterval = findViewById(R.id.etInterval)
@@ -101,14 +136,98 @@ class MainActivity : AppCompatActivity() {
             listOf("Tự động", "Luôn tách đôi", "Không tách (1 trang)")
         )
 
+        spRotate.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("Không xoay", "Xoay 180° (ảnh bị ngược)", "Xoay 90° sang phải", "Xoay 90° sang trái")
+        )
+        val ver = try { packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "?" }
+        tvVersion.text = "Phiên bản $ver"
+        spOutput.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("Nguyên gốc (ảnh màu)", "Đen trắng")
+        )
+        val pf = getSharedPreferences("scan", MODE_PRIVATE)
+        spRotate.setSelection(pf.getInt("rt", 0).coerceIn(0, 3))
+        cbCurve.isChecked = pf.getBoolean("cv", true)
+        spCalib.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("Tự động (mặc định)", "Nâng cao (chọn ảnh mẫu)")
+        )
+        spCalib.setSelection(pf.getInt("cb", 0).coerceIn(0, 1))
+        spCalib.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) = refreshCalib()
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+        btnCalib.setOnClickListener {
+            val i = Intent(this, CalibrateActivity::class.java)
+            if (queue.isNotEmpty()) i.putExtra(CalibrateActivity.EXTRA_FIRST, queue[0].toString())
+            calibLauncher.launch(i)
+        }
+        loadProfile()
+        spOutput.setSelection(pf.getInt("ot", 1).coerceIn(0, 1))
+        sbInk.progress = pf.getInt("ink", 5).coerceIn(0, 30)
+        fun refreshInk() {
+            tvInk.text = "Độ đậm đen trắng: +${sbInk.progress}%  (cao hơn = chữ đậm hơn, thấp hơn = nhạt hơn)"
+            inkBox.visibility = if (spOutput.selectedItemPosition == 1) View.VISIBLE else View.GONE
+        }
+        spOutput.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) = refreshInk()
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+        sbInk.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, v: Int, fromUser: Boolean) = refreshInk()
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+        refreshInk()
+
         btnCamera.setOnClickListener { startAutoCapture() }
         btnPick.setOnClickListener { pickImages.launch("image/*") }
         btnProcess.setOnClickListener { processQueue() }
         btnClear.setOnClickListener { queue.clear(); updateQueueUi() }
         btnPdf.setOnClickListener { exportPdf() }
         val pref = getSharedPreferences("scan", MODE_PRIVATE)
-        pref.getString("sw", null)?.let { etSpreadW.setText(it) }
-        pref.getString("sh", null)?.let { etSpreadH.setText(it) }
+        spPaper.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item,
+            papers.map { (n, w, h) -> if (w > 0) "$n  –  ${fmt(w)} × ${fmt(h)} cm" else n }
+        )
+        // Mặc định A4; nếu đã lưu thì khôi phục (kể cả giá trị người dùng tự sửa)
+        val idx = pref.getInt("pp", 0).coerceIn(0, papers.size - 1)
+        settingPreset = true
+        spPaper.setSelection(idx)
+        etPageW.setText(pref.getString("pw", null) ?: fmt(papers[0].second))
+        etPageH.setText(pref.getString("ph", null) ?: fmt(papers[0].third))
+        settingPreset = false
+        spPaper.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                val (_, w, h) = papers[pos]
+                if (w > 0 && !settingPreset) {
+                    settingPreset = true
+                    etPageW.setText(fmt(w)); etPageH.setText(fmt(h))
+                    settingPreset = false
+                }
+                updateSpreadInfo()
+            }
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+        val watcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun onTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun afterTextChanged(e: android.text.Editable?) {
+                if (settingPreset) return
+                // Sửa tay: nếu khác mọi khổ chuẩn thì chuyển sang "Tuỳ chỉnh"
+                val w = pageW(); val h = pageH()
+                val m = papers.indexOfFirst { it.second > 0 && Math.abs(it.second - w) < 0.005 && Math.abs(it.third - h) < 0.005 }
+                val target = if (m >= 0) m else papers.size - 1
+                if (spPaper.selectedItemPosition != target) {
+                    settingPreset = true; spPaper.setSelection(target); settingPreset = false
+                }
+                updateSpreadInfo()
+            }
+        }
+        etPageW.addTextChangedListener(watcher)
+        etPageH.addTextChangedListener(watcher)
+        updateSpreadInfo()
         pref.getString("mg3", null)?.let { etMargin.setText(it) }
         pref.getString("cd", null)?.let { etDelay.setText(it) }
         pref.getString("ci", null)?.let { etInterval.setText(it) }
@@ -116,15 +235,43 @@ class MainActivity : AppCompatActivity() {
         updateQueueUi()
     }
 
+    private val calibLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { loadProfile() }
+
+    private fun loadProfile() {
+        profile = ColorProfile.fromJson(getSharedPreferences("scan", MODE_PRIVATE).getString(CalibrateActivity.PREF_PROFILE, null))
+        refreshCalib()
+    }
+
+    private fun refreshCalib() {
+        val adv = spCalib.selectedItemPosition == 1
+        btnCalib.visibility = if (adv) View.VISIBLE else View.GONE
+        tvCalib.text = if (!adv) "Tự ước lượng màu nền/giấy từ chính ảnh đang xử lý."
+        else if (profile != null) "Đã có hồ sơ nền/giấy" + (if (profile!!.inkRatio > 0) "/chữ" else "") + " – dùng cho cả loạt ảnh. Bấm nút để chọn lại."
+        else "Chưa có hồ sơ – sẽ dùng chế độ tự động cho tới khi bạn chọn ảnh mẫu."
+    }
+
     private fun options() = ScanOptions(
+        calibAdvanced = spCalib.selectedItemPosition == 1 && profile != null,
+        profile = profile,
+        rotate = intArrayOf(0, 180, 90, 270)[spRotate.selectedItemPosition.coerceIn(0, 3)],
+        curve = cbCurve.isChecked,
+        output = if (spOutput.selectedItemPosition == 0) OutputType.ORIGINAL else OutputType.BW,
+        blackBoost = sbInk.progress / 100.0,
         split = SplitMode.values()[spSplit.selectedItemPosition],
         autoCrop = cbCrop.isChecked,
         deskew = cbDeskew.isChecked,
         merge = cbMerge.isChecked,
-        spreadWcm = (etSpreadW.text.toString().replace(',', '.').toDoubleOrNull() ?: 30.0).coerceIn(10.0, 120.0),
-        spreadHcm = (etSpreadH.text.toString().replace(',', '.').toDoubleOrNull() ?: 21.0).coerceIn(10.0, 80.0),
+        spreadWcm = 2 * pageW(),   // sách mở ngang: rộng = 2 trang
+        spreadHcm = pageH(),
         marginCm = (etMargin.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.5).coerceIn(0.0, 5.0)
     )
+
+    private fun fmt(v: Double) = if (v == Math.floor(v)) v.toInt().toString() else "%.2f".format(Locale.US, v).trimEnd('0').trimEnd('.')
+    private fun pageW() = (etPageW.text.toString().replace(',', '.').toDoubleOrNull() ?: 21.0).coerceIn(5.0, 60.0)
+    private fun pageH() = (etPageH.text.toString().replace(',', '.').toDoubleOrNull() ?: 29.7).coerceIn(5.0, 80.0)
+    private fun updateSpreadInfo() {
+        tvSpread.text = "Sách mở (2 trang): ${fmt(2 * pageW())} × ${fmt(pageH())} cm – camera chụp ngang"
+    }
 
     private fun addToQueue(uris: List<Uri>) {
         queue.addAll(uris)
@@ -165,8 +312,14 @@ class MainActivity : AppCompatActivity() {
         if (queue.isEmpty()) return
         val opt = options()
         getSharedPreferences("scan", MODE_PRIVATE).edit()
-            .putString("sw", etSpreadW.text.toString())
-            .putString("sh", etSpreadH.text.toString())
+            .putString("pw", etPageW.text.toString())
+            .putString("ph", etPageH.text.toString())
+            .putInt("pp", spPaper.selectedItemPosition)
+            .putInt("ot", spOutput.selectedItemPosition)
+            .putInt("rt", spRotate.selectedItemPosition)
+            .putBoolean("cv", cbCurve.isChecked)
+            .putInt("cb", spCalib.selectedItemPosition)
+            .putInt("ink", sbInk.progress)
             .putString("mg3", etMargin.text.toString()).apply()
         val work = queue.toList()
         setBusy(true)

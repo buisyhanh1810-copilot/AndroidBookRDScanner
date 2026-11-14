@@ -424,6 +424,10 @@ object EdgeDetector {
      * Bắt dính các cạnh [snapIds] (0=trên,1=phải,2=dưới,3=trái) vào mép giấy thật quanh vị trí dự đoán [prior].
      * [pq] = tứ giác từ prior, [s] = px/cm, [sup] = độ được chữ đỡ của từng cạnh. Cạnh ngoài snapIds giữ nguyên.
      */
+    /** Hiệu chuẩn màu giấy/nền: null+calibAuto=true -> tự động; calibProfile != null -> dùng hồ sơ người dùng; cả hai tắt -> không dùng. */
+    @Volatile var calibAuto: Boolean = true
+    @Volatile var calibProfile: ColorProfile? = null
+
     private fun snapSides(
         small: Mat, tp: TextPts, prior: List<Ln>, pq: Array<V>, s: Double,
         sup: DoubleArray, snapIds: Set<Int>
@@ -477,6 +481,17 @@ object EdgeDetector {
         chromM.put(0, 0, chromRaw)
         Imgproc.GaussianBlur(chromM, chromM, Size(0.0, 0.0), 2.0)
         val chrom = floats(chromM)
+        // ---- tín hiệu "xác suất là giấy" từ hồ sơ màu (tự động hoặc người dùng chọn) ----
+        val prof: ColorProfile? = calibProfile ?: if (calibAuto) ColorProfile.auto(ls, aArr, bArr, w, h) else null
+        val postRaw = prof?.posterior(ls, aArr, bArr, w, h)
+        val post: FloatArray? = if (postRaw != null) {
+            val pm = Mat(h, w, CvType.CV_32F)
+            pm.put(0, 0, postRaw)
+            Imgproc.GaussianBlur(pm, pm, Size(0.0, 0.0), 1.5)
+            val r = floats(pm)
+            pm.release()
+            r
+        } else null
 
         val scales = intArrayOf(2, 4, 7, 11)
         val gam = doubleArrayOf(1.0, 0.97, 0.93, 0.88)
@@ -501,9 +516,11 @@ object EdgeDetector {
             }
             val eArr = Array(kRays) { DoubleArray(n) }
             val pcArr = Array(kRays) { DoubleArray(n) }
+            val ppArr = Array(kRays) { DoubleArray(n) }
             val inb = Array(kRays) { BooleanArray(n) }
             val lr = DoubleArray(n)
             val cr = DoubleArray(n)
+            val pr = DoubleArray(n)
             for (k in 0 until kRays) {
                 for (j in 0 until n) {
                     val u = (j - band).toDouble()
@@ -511,11 +528,13 @@ object EdgeDetector {
                     val py = cy[k] + u * o.y
                     lr[j] = bil(ls, w, h, px, py)
                     cr[j] = bil(chrom, w, h, px, py)
+                    if (post != null) pr[j] = bil(post, w, h, px, py)
                     inb[k][j] = px >= 0 && px <= w - 1 && py >= 0 && py <= h - 1
                 }
                 val cl = DoubleArray(n + 1)
                 val cc = DoubleArray(n + 1)
-                for (j in 0 until n) { cl[j + 1] = cl[j] + lr[j]; cc[j + 1] = cc[j] + cr[j] }
+                val cp = DoubleArray(n + 1)
+                for (j in 0 until n) { cl[j + 1] = cl[j] + lr[j]; cc[j + 1] = cc[j] + cr[j]; cp[j + 1] = cp[j] + pr[j] }
                 for (si in scales.indices) {
                     val sc2 = scales[si]
                     val g = gam[si]
@@ -527,6 +546,11 @@ object EdgeDetector {
                         val cin = (cc[j] - cc[j - sc2]) / sc2
                         val cout = (cc[j + sc2 + 1] - cc[j + 1]) / sc2
                         pcArr[k][j] = max(pcArr[k][j], g * clip(cin - cout, 0.0, 1.0))
+                        if (post != null) {
+                            val pin = (cp[j] - cp[j - sc2]) / sc2
+                            val pout = (cp[j + sc2 + 1] - cp[j + 1]) / sc2
+                            ppArr[k][j] = max(ppArr[k][j], g * clip(pin - pout, 0.0, 1.0))
+                        }
                     }
                 }
             }
@@ -548,6 +572,7 @@ object EdgeDetector {
                     val z = u / (0.6 * s + 1e-6) * 0.9
                     val pri = exp(-0.5 * z * z)
                     sRow[j] = if (!inb[k][j] || j < 6 || j >= n - 6) 0.0
+                    else if (post != null) gate * (0.30 * en + 0.30 * pcArr[k][j] + 0.30 * ppArr[k][j] + 0.10 * pri)
                     else gate * (0.60 * en + 0.30 * pcArr[k][j] + 0.10 * pri)
                 }
                 var jb = 0
@@ -556,7 +581,8 @@ object EdgeDetector {
                 var ex = -1.0
                 for (j in 0 until n) if (!(j >= jb - 7 && j < jb + 8) && sRow[j] > ex) ex = sRow[j]
                 val s2 = max(ex, median(sRow))
-                conf[k] = clip((smax - s2) / 0.25, 0.0, 1.0) * clip(eArr[k][jb] / 0.35, 0.0, 1.0)
+                val ev = if (post != null) max(eArr[k][jb], ppArr[k][jb]) else eArr[k][jb]
+                conf[k] = clip((smax - s2) / 0.25, 0.0, 1.0) * clip(ev / 0.35, 0.0, 1.0)
                 val u = (jb - band).toDouble()
                 ptsX[k] = cx[k] + o.x * u
                 ptsY[k] = cy[k] + o.y * u

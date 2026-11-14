@@ -12,7 +12,7 @@ android {
         minSdk = 29
         targetSdk = 34
         versionCode = (findProperty("vc") as String?)?.toIntOrNull() ?: 1
-        versionName = (findProperty("vn") as String?) ?: "1.0"
+        versionName = (findProperty("vn") as String?) ?: "1.1"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
     buildFeatures { buildConfig = true }
