@@ -17,7 +17,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-class ScanResult(val pages: List<Bitmap>, val pxPerCm: Double)
+class ScanResult(val pages: List<Bitmap>, val pxPerCm: Double, val note: String? = null)
 
 enum class SplitMode { AUTO, ALWAYS, NEVER }
 
@@ -33,11 +33,20 @@ data class ScanOptions(
     val blackBoost: Double = 0.05,    // tăng độ đen ảnh BW (tỉ lệ thang 0..255)
     val spreadWcm: Double = 30.0,     // rộng thật của sách MỞ (2 trang), cm
     val spreadHcm: Double = 21.0,     // cao thật của sách, cm
-    val marginCm: Double = 0.5,       // lề dư quanh nội dung
+    val marginCm: Double = 0.5,       // lề dư quanh nội dung (chỉ khi cropContent)
+    val cropContent: Boolean = false, // false: giữ nguyên khổ trang (đúng khi ít chữ); true: cắt theo khối nội dung
     val merge: Boolean = false,       // sau khi xử lý riêng từng trang, ghép lại thành 1 ảnh 2 trang
     val calibAdvanced: Boolean = false, // true: dùng hồ sơ nền/giấy/chữ do người dùng chọn; false: tự ước lượng từ ảnh
     val profile: ColorProfile? = null,
-    val maxSide: Int = 3000
+    val maxSide: Int = 3000,
+    // --- tab "Một trang" ---
+    val singlePage: Boolean = false,  // true: ảnh chụp MỘT trang; spreadWcm/spreadHcm khi đó là khổ MỘT trang
+    val gutterSide: Int = 2,          // cạnh gáy của trang: 0 = trái, 1 = phải, 2 = không có (tờ rời)
+    val rowFix: Boolean = true,       // nắn nghiêng/xòe theo hàng chữ
+    val compressFix: Boolean = true,  // kéo giãn chữ bị nén ngang gần gáy (tab Một trang, cần chọn vị trí gáy)
+    val mergeMarginCm: Double = 0.0,  // lề quanh ảnh GHÉP 2 trang: dương = thêm lề trắng, âm = cắt lẹm vào
+    val gutterMarginCm: Double = 0.0, // khoảng trắng phía gáy của mỗi trang: dương = thêm, âm = cắt bớt
+    val trackEdges: Boolean = true    // bám biên chính xác riêng từng trang (mép ngoài tự do, gáy giữ nguyên)
 )
 
 /**
@@ -62,6 +71,7 @@ object BookScanner {
             img = r
         }
         img = limit(img, opt.maxSide)
+        if (opt.singlePage) return SinglePageScanner.process(img, opt)
 
         var spread = img
         var ppc = img.cols() / opt.spreadWcm      // px/cm (ước lượng khi không có viền)
@@ -105,7 +115,7 @@ object BookScanner {
             val qd = quad
             if (sized && qd != null) {
                 // mỗi trang một phép biến đổi phối cảnh riêng: tứ giác (mép ngoài + đường gáy) -> chữ nhật
-                pages.addAll(splitSized(img, qd, spread, ppc, opt.curve))
+                pages.addAll(splitSized(img, qd, spread, ppc, opt.curve, opt.trackEdges))
             } else {
                 val gx = findGutter(spread)
                 pages.add(spread.submat(0, spread.rows(), 0, gx))
@@ -117,16 +127,47 @@ object BookScanner {
         // xử lý RIÊNG từng trang trước (xoá bóng, đen trắng, chỉnh nghiêng, cắt theo nội dung)
         // Nếu ghép: làm sạch cả hai trang (chưa cắt/thêm lề), ghép lại rồi MỚI cắt theo nội dung + thêm lề quanh ảnh ghép
         val merging = opt.merge && pages.size == 2
-        val cleaned = pages.map { cleanPage(it, opt, ppc, cropNow = !merging) }
+        val cleaned = pages.map { cleanPage(it, opt, ppc, cropNow = !merging) }.toMutableList()
+        // thêm/bớt khoảng trắng ở phía gáy từng trang (trang trái: cạnh phải; trang phải: cạnh trái)
+        if (doSplit && cleaned.size == 2 && opt.gutterMarginCm != 0.0) {
+            val gpx = Math.round(opt.gutterMarginCm * ppc).toInt()
+            cleaned[0] = adjustSide(cleaned[0], right = true, px = gpx)
+            cleaned[1] = adjustSide(cleaned[1], right = false, px = gpx)
+        }
         val outs = if (merging) {
             if (opt.output == OutputType.BW) {
                 // xoá vệt tối chạm mép từng trang (bóng gáy...) TRƯỚC khi ghép; cropToContent sửa tại chỗ, bỏ ảnh cắt trả về
                 for (c in cleaned) { val r = cropToContent(c, 0); if (r !== c) r.release() }
             }
             val m = mergeSideBySide(cleaned[0], cleaned[1])
-            if (opt.output == OutputType.BW) listOf(cropToContent(m, (opt.marginCm * ppc).toInt().coerceAtLeast(0))) else listOf(m)
+            val m2 = if (opt.output == OutputType.BW && opt.cropContent) cropToContent(m, (opt.marginCm * ppc).toInt().coerceAtLeast(0)) else m
+            listOf(adjustMargin(m2, Math.round(opt.mergeMarginCm * ppc).toInt()))
         } else cleaned
         return ScanResult(outs.map { toBitmap(it) }, ppc)
+    }
+
+    /** Thêm (px > 0, nền trắng) hoặc cắt bớt (px < 0) [px] điểm ảnh ở MỘT cạnh (phải hoặc trái) của trang. */
+    internal fun adjustSide(m: Mat, right: Boolean, px: Int): Mat {
+        if (px == 0) return m
+        if (px > 0) {
+            val out = Mat()
+            Core.copyMakeBorder(m, out, 0, 0, if (right) 0 else px, if (right) px else 0, Core.BORDER_CONSTANT, Scalar.all(255.0))
+            return out
+        }
+        val cut = min(-px, (m.cols() * 0.4).toInt())
+        return if (right) m.submat(0, m.rows(), 0, m.cols() - cut).clone() else m.submat(0, m.rows(), cut, m.cols()).clone()
+    }
+
+    /** Thêm (px > 0) lề trắng hoặc cắt lẹm vào (px < 0) đều bốn phía; không cắt quá 40% mỗi chiều. */
+    internal fun adjustMargin(m: Mat, px: Int): Mat {
+        if (px == 0) return m
+        if (px > 0) {
+            val out = Mat()
+            Core.copyMakeBorder(m, out, px, px, px, px, Core.BORDER_CONSTANT, Scalar.all(255.0))
+            return out
+        }
+        val c = min(-px, (min(m.cols(), m.rows()) * 0.4).toInt())
+        return m.submat(c, m.rows() - c, c, m.cols() - c).clone()
     }
 
     /** Ghép trang trái + trang phải (cùng px/cm) thành 1 ảnh: cao bằng nhau (đệm trắng), sát nhau như sách mở. */
@@ -153,7 +194,7 @@ object BookScanner {
         return bgr
     }
 
-    private fun toBitmap(m: Mat): Bitmap {
+    internal fun toBitmap(m: Mat): Bitmap {
         val rgba = Mat()
         Imgproc.cvtColor(
             m, rgba,
@@ -176,7 +217,7 @@ object BookScanner {
     }
 
     // ---------- 1. tìm viền sách ----------
-    private fun detectQuad(bgr: Mat): Array<Point>? {
+    internal fun detectQuad(bgr: Mat): Array<Point>? {
         val scale = 800.0 / max(bgr.cols(), bgr.rows())
         val small = Mat()
         Imgproc.resize(bgr, small, Size(), scale, scale, Imgproc.INTER_AREA)
@@ -313,7 +354,7 @@ object BookScanner {
      * Gáy dò ở nửa trên và nửa dưới của ảnh nắn tạm rồi chiếu ngược về ảnh gốc,
      * nên cả hai trang ra đúng cùng kích thước chữ nhật dù phối cảnh/cong làm hai nửa to nhỏ khác nhau.
      */
-    private fun splitSized(img: Mat, q: Array<Point>, spread: Mat, ppc: Double, curveOn: Boolean): List<Mat> {
+    private fun splitSized(img: Mat, q: Array<Point>, spread: Mat, ppc: Double, curveOn: Boolean, trackOn: Boolean = false): List<Mat> {
         val w = spread.cols()
         val h = spread.rows()
         val dst = MatOfPoint2f(Point(0.0, 0.0), Point(w - 1.0, 0.0), Point(w - 1.0, h - 1.0), Point(0.0, h - 1.0))
@@ -354,9 +395,14 @@ object BookScanner {
                 Imgproc.INTER_LINEAR, Core.BORDER_REPLICATE)
             // BƯỚC 2: riêng trang này dò lại 3 mép ngoài (trên/dưới/ngoài) rồi nắn về chữ nhật
             val outer = if (side == 0) setOf(0, 2, 3) else setOf(0, 1, 2)
-            val q2 = try {
+            var q2 = try {
                 EdgeDetector.refinePage(crop, doubleArrayOf(x0.toDouble(), m.toDouble(), (x0 + pw).toDouble(), (m + h).toDouble()), ppc, outer)
             } catch (e: Exception) { null }
+            // BƯỚC 2b: bám biên chính xác riêng từng trang (mép ngoài tự do, gáy giữ nguyên)
+            if (trackOn && q2 != null) {
+                val t = try { EdgeTracker.refineCrop(img, mm, q2, rq, pw / ppc, h / ppc, if (side == 0) 1 else 3) } catch (e: Throwable) { null }
+                if (t != null) q2 = t
+            }
             // Nắn cong theo mép giấy (mép trên/dưới là đường cong); lỗi hoặc không tin cậy -> dùng homography
             var curves: EdgeWarp.Curves? = null
             if (curveOn && q2 != null) {
@@ -404,7 +450,7 @@ object BookScanner {
     }
 
     // ---------- 3. làm sạch trang -> đen trắng ----------
-    private fun cleanPage(page: Mat, opt: ScanOptions, pxPerCm: Double, cropNow: Boolean = true): Mat {
+    internal fun cleanPage(page: Mat, opt: ScanOptions, pxPerCm: Double, cropNow: Boolean = true): Mat {
         val ix = (page.cols() * 0.008).toInt()
         val iy = (page.rows() * 0.008).toInt()
         val roi = page.submat(iy, page.rows() - iy, ix, page.cols() - ix).clone()
@@ -444,6 +490,12 @@ object BookScanner {
         Imgproc.threshold(gray, bw, min(254.0, thr + opt.blackBoost * 255.0), 255.0, Imgproc.THRESH_BINARY)
 
         if (!cropNow) return bw
+        if (!opt.cropContent) {
+            // giữ nguyên khổ trang: chỉ xoá vệt tối chạm mép (bóng gáy, mép sách), không cắt theo chữ
+            val r = cropToContent(bw, 0)
+            if (r !== bw) r.release()
+            return bw
+        }
         return cropToContent(bw, (opt.marginCm * pxPerCm).toInt().coerceAtLeast(0))
     }
 

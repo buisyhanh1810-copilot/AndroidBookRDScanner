@@ -689,7 +689,226 @@ object EdgeDetector {
      * [spreadWcm] x [spreadHcm]: kích thước thật của sách mở (2 trang), cm.
      * Trả về [tl, tr, br, bl] theo toạ độ ảnh gốc, hoặc null nếu không tìm được (ví dụ trang không có chữ).
      */
-    fun detectQuad(bgr: Mat, spreadWcm: Double, spreadHcm: Double): Array<Point>? {
+    /**
+     * Tìm tứ giác bao quanh sách mở bằng HAI cách rồi chọn cách đáng tin hơn:
+     *  - theo khối chữ (chính xác khi trang đầy chữ),
+     *  - theo vùng giấy tách khỏi nền bằng màu (đúng cả khi chữ ít, trang trống nhiều).
+     * Hai khung gần nhau (< 12 mm) -> dùng khung theo chữ. Lệch nhiều -> chọn khung có đường biên tương phản màu rõ hơn
+     * (giấy/nền), nhưng khung giấy phải chứa hết chữ.
+     */
+    /**
+     * Như [detectQuad] nhưng cho ẢNH CHỤP MỘT TRANG: [pageWcm] x [pageHcm] là khổ một trang (cm).
+     * Lề tiên nghiệm tính cho một trang (hai lề trái/phải bằng nhau), không có gáy ở giữa ảnh.
+     */
+    fun detectPageQuad(bgr: Mat, pageWcm: Double, pageHcm: Double): Array<Point>? =
+        detectQuad(bgr, pageWcm, pageHcm, single = true)
+
+    /** true (mặc định): lấy khung theo BIÊN GIẤY; chỉ khi không dò được biên giấy mới dùng khung theo khối chữ. false: kết hợp cả hai (cách cũ). */
+    @Volatile var paperFirst: Boolean = true
+
+    fun detectQuad(bgr: Mat, spreadWcm: Double, spreadHcm: Double, single: Boolean = false): Array<Point>? {
+        if (paperFirst) {
+            val pq = try { paperQuad(bgr) } catch (e: Exception) { null }
+            if (pq != null) return pq
+            return try { detectQuadText(bgr, spreadWcm, spreadHcm, single) } catch (e: Exception) { null }
+        }
+        val t = try { detectQuadText(bgr, spreadWcm, spreadHcm, single) } catch (e: Exception) { null }
+        val p = try { paperQuad(bgr) } catch (e: Exception) { null }
+        if (p == null) return t
+        if (t == null) return p
+        return try { fuse(bgr, t, p, spreadWcm, spreadHcm) } catch (e: Exception) { t }
+    }
+
+    private fun fuse(bgr: Mat, qt: Array<Point>, qp: Array<Point>, sw: Double, sh: Double): Array<Point> {
+        val sc = 700.0 / max(bgr.cols(), bgr.rows())
+        val a = Array(4) { V(qt[it].x * sc, qt[it].y * sc) }
+        val b = Array(4) { V(qp[it].x * sc, qp[it].y * sc) }
+        val top = ((b[1] - b[0]).len() + (b[2] - b[3]).len()) / 2
+        val side = ((b[3] - b[0]).len() + (b[2] - b[1]).len()) / 2
+        val s = sqrt(top / sw * side / sh)
+        var dist = 0.0
+        for (i in 0 until 4) dist += (a[i] - b[i]).len()
+        dist = dist / 4 / s * 10.0                     // mm
+        if (dist < 12.0) return qt
+        val small = Mat()
+        Imgproc.resize(bgr, small, Size(), sc, sc, Imgproc.INTER_AREA)
+        val w = small.cols()
+        val h = small.rows()
+        val lab = Mat()
+        Imgproc.cvtColor(small, lab, Imgproc.COLOR_BGR2Lab)
+        val labB = Mat()
+        Imgproc.GaussianBlur(lab, labB, Size(0.0, 0.0), 1.0)
+        val buf = ByteArray(w * h * 3)
+        labB.get(0, 0, buf)
+        val ct = sideContrast(buf, w, h, a, s)
+        val cp = sideContrast(buf, w, h, b, s)
+        // chữ phải nằm trong khung giấy
+        val chs = ArrayList<Mat>()
+        Core.split(lab, chs)
+        val tp = textPoints(chs[0], w, h, max(w, h).toDouble())
+        if (tp.n > 50) {
+            var tot = 0
+            var out = 0
+            var i = 0
+            while (i < tp.n) {
+                tot++
+                if (!insideQuad(b, tp.xs[i], tp.ys[i])) out++
+                i += 5
+            }
+            if (out.toDouble() / max(tot, 1) > 0.03) return qt
+        }
+        return if (cp > ct) qp else qt
+    }
+
+    private fun insideQuad(q: Array<V>, x: Double, y: Double): Boolean {
+        var sign = 0
+        for (i in 0 until 4) {
+            val a = q[i]
+            val b = q[(i + 1) % 4]
+            val cr = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x)
+            val sg = if (cr > 0) 1 else if (cr < 0) -1 else 0
+            if (sg != 0) { if (sign == 0) sign = sg else if (sg != sign) return false }
+        }
+        return true
+    }
+
+    /** Độ tương phản màu trong/ngoài dọc 4 cạnh khung (trung vị theo điểm, trung bình 4 cạnh). buf = Lab 8U đã làm mờ. */
+    private fun sideContrast(buf: ByteArray, w: Int, h: Int, q: Array<V>, s: Double): Double {
+        val cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4
+        val cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4
+        val d = max(3.0, 0.6 * s)
+        var total = 0.0
+        for (i in 0 until 4) {
+            val a = q[i]
+            val b = q[(i + 1) % 4]
+            val len = (b - a).len()
+            val tx = (b.x - a.x) / len
+            val ty = (b.y - a.y) / len
+            var ox = ty
+            var oy = -tx
+            if (ox * ((a.x + b.x) / 2 - cx) + oy * ((a.y + b.y) / 2 - cy) < 0) { ox = -ox; oy = -oy }
+            fun band(px: Double, py: Double, off: Double): DoubleArray? {
+                val acc = DoubleArray(3)
+                for (k in 0 until 4) {
+                    val e = off + d * k / 3.0
+                    val x = (px + ox * e).toInt()
+                    val y = (py + oy * e).toInt()
+                    if (x < 1 || y < 1 || x > w - 2 || y > h - 2) return null
+                    for (c in 0 until 3) acc[c] += (buf[(y * w + x) * 3 + c].toInt() and 0xFF) / 4.0
+                }
+                return acc
+            }
+            val vals = ArrayList<Double>()
+            for (k in 0 until 28) {
+                val u = 0.15 + 0.7 * k / 27.0
+                val px = a.x + (b.x - a.x) * u
+                val py = a.y + (b.y - a.y) * u
+                val inn = band(px, py, -d - 1)
+                val out = band(px, py, 2.0)
+                vals.add(if (inn == null || out == null) 0.0 else hypot(0.5 * (inn[0] - out[0]), hypot(inn[1] - out[1], inn[2] - out[2])))
+            }
+            vals.sort()
+            total += vals[vals.size / 2]
+        }
+        return total / 4
+    }
+
+    /**
+     * Tách vùng giấy khỏi nền: phân cụm màu Lab (L nhẹ, a, b) lấy cụm chứa tâm ảnh làm giấy, tinh chỉnh bằng GrabCut,
+     * rồi lấy bao lồi -> tứ giác. Trả về toạ độ ảnh gốc, thứ tự tl,tr,br,bl.
+     */
+    private fun paperQuad(bgr: Mat): Array<Point>? {
+        val sc = 350.0 / max(bgr.cols(), bgr.rows())
+        val sm = Mat()
+        Imgproc.resize(bgr, sm, Size(), sc, sc, Imgproc.INTER_AREA)
+        val w = sm.cols()
+        val h = sm.rows()
+        val blur = Mat()
+        Imgproc.GaussianBlur(sm, blur, Size(0.0, 0.0), 1.5)
+        val lab = Mat()
+        Imgproc.cvtColor(blur, lab, Imgproc.COLOR_BGR2Lab)
+        val buf = ByteArray(w * h * 3)
+        lab.get(0, 0, buf)
+        val f0 = DoubleArray(w * h) { 0.35 * (buf[it * 3].toInt() and 0xFF) }
+        val f1 = DoubleArray(w * h) { (buf[it * 3 + 1].toInt() and 0xFF) - 128.0 }
+        val f2 = DoubleArray(w * h) { (buf[it * 3 + 2].toInt() and 0xFF) - 128.0 }
+        val c0 = DoubleArray(3)
+        run {
+            val x0 = (0.4 * w).toInt(); val x1 = (0.6 * w).toInt(); val y0 = (0.4 * h).toInt(); val y1 = (0.6 * h).toInt()
+            val l = ArrayList<Double>(); val a = ArrayList<Double>(); val b = ArrayList<Double>()
+            for (y in y0 until y1) for (x in x0 until x1) { l.add(f0[y * w + x]); a.add(f1[y * w + x]); b.add(f2[y * w + x]) }
+            l.sort(); a.sort(); b.sort()
+            c0[0] = l[l.size / 2]; c0[1] = a[a.size / 2]; c0[2] = b[b.size / 2]
+        }
+        fun dd(i: Int, c: DoubleArray) = sqrt((f0[i] - c[0]) * (f0[i] - c[0]) + (f1[i] - c[1]) * (f1[i] - c[1]) + (f2[i] - c[2]) * (f2[i] - c[2]))
+        val cen = arrayOf(c0.clone(), c0.clone())
+        var far = -1.0
+        for (i in 0 until w * h) { val d = dd(i, c0); if (d > far) { far = d; cen[1] = doubleArrayOf(f0[i], f1[i], f2[i]) } }
+        val lbl = IntArray(w * h)
+        repeat(12) {
+            val sum = Array(2) { DoubleArray(3) }
+            val n = IntArray(2)
+            for (i in 0 until w * h) {
+                val k = if (dd(i, cen[0]) <= dd(i, cen[1])) 0 else 1
+                lbl[i] = k; sum[k][0] += f0[i]; sum[k][1] += f1[i]; sum[k][2] += f2[i]; n[k]++
+            }
+            for (k in 0..1) if (n[k] > 0) for (c in 0..2) cen[k][c] = sum[k][c] / n[k]
+        }
+        // hai cụm phải đủ tách biệt (theo a,b) mới tin được
+        if (hypot(cen[0][1] - cen[1][1], cen[0][2] - cen[1][2]) < 3.0 && abs(cen[0][0] - cen[1][0]) < 8.0) return null
+        // GrabCut: nền chắc ở viền, giấy chắc ở giữa, còn lại theo cụm màu
+        val gb = ByteArray(w * h) { if (lbl[it] == 0) 3 else 2 }
+        for (y in (0.4 * h).toInt() until (0.6 * h).toInt()) for (x in (0.4 * w).toInt() until (0.6 * w).toInt()) gb[y * w + x] = 1
+        val bd = max(2, (0.02 * max(w, h)).toInt())
+        for (y in 0 until h) for (x in 0 until w) if (x < bd || y < bd || x >= w - bd || y >= h - bd) gb[y * w + x] = 0
+        val gm = Mat(h, w, CvType.CV_8U)
+        gm.put(0, 0, gb)
+        try {
+            Imgproc.grabCut(sm, gm, org.opencv.core.Rect(), Mat(), Mat(), 3, Imgproc.GC_INIT_WITH_MASK)
+            gm.get(0, 0, gb)
+        } catch (e: Exception) {
+            for (i in gb.indices) gb[i] = if (lbl[i] == 0) 3 else 2
+        }
+        val mb = ByteArray(w * h) { if (gb[it].toInt() == 1 || gb[it].toInt() == 3) 255.toByte() else 0 }
+        val m = Mat(h, w, CvType.CV_8U)
+        m.put(0, 0, mb)
+        Imgproc.morphologyEx(m, m, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0)))
+        Imgproc.morphologyEx(m, m, Imgproc.MORPH_CLOSE, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(11.0, 11.0)))
+        val labels = Mat()
+        Imgproc.connectedComponents(m, labels)
+        val li = IntArray(1)
+        labels.get(h / 2, w / 2, li)
+        if (li[0] == 0) return null
+        val comp = Mat()
+        Core.compare(labels, Scalar(li[0].toDouble()), comp, Core.CMP_EQ)
+        val cnts = ArrayList<MatOfPoint>()
+        Imgproc.findContours(comp, cnts, Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
+        val big = cnts.maxByOrNull { Imgproc.contourArea(it) } ?: return null
+        val hi = MatOfInt()
+        Imgproc.convexHull(big, hi)
+        val bp = big.toArray()
+        val hull = MatOfPoint2f(*hi.toArray().map { bp[it] }.toTypedArray())
+        val per = Imgproc.arcLength(hull, true)
+        var q: Array<Point>? = null
+        var e = 0.01
+        while (e < 0.12) {
+            val ap = MatOfPoint2f()
+            Imgproc.approxPolyDP(hull, ap, e * per, true)
+            if (ap.rows() <= 4) { if (ap.rows() == 4) q = ap.toArray(); break }
+            e += 0.005
+        }
+        if (q == null) {
+            val pts = arrayOf(Point(), Point(), Point(), Point())
+            Imgproc.minAreaRect(hull).points(pts)
+            q = pts
+        }
+        val v = orderV(q.map { V(it.x, it.y) })
+        val ar = area(v)
+        if (ar < 0.2 * w * h || ar > 0.95 * w * h || !isConvex(v)) return null
+        return Array(4) { Point(v[it].x / sc, v[it].y / sc) }
+    }
+
+    private fun detectQuadText(bgr: Mat, spreadWcm: Double, spreadHcm: Double, single: Boolean = false): Array<Point>? {
         val sc = 700.0 / max(bgr.cols(), bgr.rows())
         val small = Mat()
         Imgproc.resize(bgr, small, Size(), sc, sc, Imgproc.INTER_AREA)
@@ -715,13 +934,14 @@ object EdgeDetector {
         val mi = 0.075 * pw
         val mt = 0.060 * spreadHcm
         val mbt = 0.065 * spreadHcm
-        val tw = spreadWcm - 2 * (mo + mi)
+        val ms = 0.085 * spreadWcm                    // một trang: lề trái = lề phải = trung bình lề ngoài và lề trong
+        val tw = if (single) spreadWcm - 2 * ms else spreadWcm - 2 * (mo + mi)
         val th = spreadHcm - (mt + mbt)
         val topw = ((tq[1] - tq[0]).len() + (tq[2] - tq[3]).len()) / 2
         val sideh = ((tq[3] - tq[0]).len() + (tq[2] - tq[1]).len()) / 2
         val s = sqrt((topw / tw) * (sideh / th))      // px/cm trên ảnh thu nhỏ
         if (!s.isFinite() || s <= 1e-3) return null
-        val expM = doubleArrayOf(mt, mo, mbt, mo)     // top, right, bottom, left
+        val expM = if (single) doubleArrayOf(mt, ms, mbt, ms) else doubleArrayOf(mt, mo, mbt, mo)     // top, right, bottom, left
         val prior = (0 until 4).map { Ln(lines[it].p + lines[it].o * (expM[it] * s), lines[it].d, lines[it].o) }
         val pq = quadFromLines(prior) ?: return null
 

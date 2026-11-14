@@ -58,3 +58,31 @@ Khi bật **Ghép 2 trang thành 1 ảnh** (đen trắng): hai trang được l�
 - **Tự động (mặc định):** ước lượng mô hình màu giấy và nền từ chính ảnh đang xử lý, dùng làm thêm một tín hiệu khi tìm mép giấy.
 - **Nâng cao:** bấm "Chọn ảnh mẫu & vùng…", mở ảnh mẫu (hoặc ảnh đầu hàng đợi), khoanh vài vùng Nền / Giấy / Chữ rồi lưu. Hồ sơ được lưu trong máy và dùng cho cả loạt ảnh cùng bối cảnh. Vùng Chữ (tuỳ chọn) chỉ dùng để chỉnh ngưỡng đen trắng (chưa kiểm thử thực tế).
 - Mô phỏng Python: cải thiện khiêm tốn trên nền khó (sai số trung bình 13.4 → 12.4 mm tự động, 11.8 mm nâng cao), không làm xấu ca bình thường. Mã Kotlin chưa được biên dịch.
+
+## Cắt trang
+Mặc định giữ nguyên khổ trang đã nắn phẳng (chỉ xoá vệt tối chạm mép như bóng gáy), nên trang ít chữ vẫn đúng kích thước và vị trí. Bật "Cắt theo khối nội dung" nếu muốn cắt sát chữ kèm lề dư (cm).
+
+## Tab "Một trang" (v1.1.41)
+Giao diện có hai tab: **Hai trang** (như trước) và **Một trang** (mỗi ảnh chụp đúng một trang, chụp thẳng góc, trang chiếm gần đầy khung). Hai tab dùng chung hàng đợi, khổ giấy (1 trang), loại ảnh lưu và PDF; chỉ khác phần xử lý (`SinglePageScanner.kt`):
+1. Dò khung theo khổ **một** trang (lề trái = lề phải), kết hợp khung theo chữ và khung theo giấy/nền như tab Hai trang.
+2. **Kiểm tra khổ giấy:** suy tỉ lệ rộng/cao từ 4 góc (tiêu cự giả định 0,6 × đường chéo ảnh); lệch > 10% thì báo trong dòng trạng thái. Không phân biệt A4 với A5 và không chứng minh khung đúng.
+3. Mục **Vị trí gáy** (trái / phải / không có): cạnh gáy coi là cạnh trong, không bắt dính; 3 hoặc 4 cạnh còn lại được dò lại rồi nắn cong theo mép giấy như cũ.
+4. **Nắn theo hàng chữ** (`RowStraightener`): mặt nạ mực → góc nghiêng chung theo độ sắc profile chiếu → đỉnh = hàng chữ → đo độ lệch từng hàng theo cửa sổ cột 1,5 cm so với vùng xa gáy → hồi quy d = α(x)·(y − ȳ) + β(x), làm trơn bậc 3 → remap. Tự bỏ qua khi < 8 hàng chữ, góc nghiêng chạm ±3°, phủ dưới nửa bề rộng hoặc độ lệch quá nhỏ. Bật/tắt bằng ô "Nắn nghiêng và xòe theo hàng chữ".
+
+Chưa làm: hiệu chỉnh nén ngang gần gáy (mới thử trong mô phỏng), kéo tay 4 góc. Thuật toán dò hàng và nắn dọc mới thử bằng prototype Python trên ảnh hai trang; mã Kotlin của tab này **chưa được biên dịch hay chạy thử**.
+
+## Cập nhật 1.1.42
+- **Dò khung theo biên giấy:** mặc định lấy khung theo biên giấy/nền (`EdgeDetector.paperFirst = true`); chỉ khi không dò được biên giấy mới dùng khung theo khối chữ. Đặt `paperFirst = false` để về cách cũ (kết hợp chữ + giấy). Lưu ý: trong mô phỏng, khung chỉ theo biên giấy yếu hơn trên nền lộn xộn/ít tương phản; chưa đo lại bằng mã Kotlin.
+- **Lề ảnh ghép:** ô "Lề quanh ảnh ghép (cm)" (hiện khi bật Ghép 2 trang). Dương = thêm lề trắng, âm = cắt lẹm vào; giới hạn ±5 cm và không cắt quá 40% mỗi chiều.
+- **Khoảng trắng phía gáy:** ô "Khoảng trắng phía gáy mỗi trang (cm)". Dương = thêm dải trắng ở cạnh gáy, âm = cắt bớt; áp dụng cho từng trang khi tách (cả khi ghép, nên chỉnh được khe giữa hai trang) và cho tab Một trang khi đã chọn vị trí gáy.
+
+## Cập nhật 1.1.43 – kéo giãn chữ bị nén ngang gần gáy (tab Một trang)
+`HorizontalFlattener.kt`: sách dày mở chụp chính diện làm chữ gần gáy hẹp lại (≈ cos của độ dốc mặt giấy). Ước lượng hệ số nén c(x) bằng bề rộng "từ" (trung bình theo ô 1,5 cm so với vùng phẳng, đa thức bậc 4) và bằng mô hình cos(θ·exp(−(d/σ)²)) khớp bình phương tối thiểu, lấy trung bình hai cách; dãn cột theo 1/c rồi chuẩn hoá giữ bề rộng trang. Có cổng: chỉ nắn khi c trung bình trong 3 cm sát gáy < 0,92 và có ≥ 60 từ; cần chọn vị trí gáy (trái/phải). Ô bật/tắt "Kéo giãn chữ bị nén ngang gần gáy".
+
+Mô phỏng Python (sai số tổng, cm; V0 = chỉ homography → nắn dọc → thêm nắn ngang): sách dày 0,669 → 0,613 → 0,303; rất dày 1,153 → 1,085 → 0,585; vừa 0,277 → 0,240 → 0,219 (cổng chỉ mở 1/8 ca); phẳng và nhẹ không đổi (cổng đóng). Trên ảnh thật hai trang chưa áp dụng được (không thấy nén rõ, quá ít từ). Mã Kotlin chưa biên dịch/chạy thử.
+
+## 1.1.44 – Bám biên chính xác từng trang (gáy giữ nguyên)
+- Thêm `EdgeTracker`: sau khi dò khung từng trang, bám lại 3 mép ngoài (hoặc 4 mép nếu tờ rời) bằng 48 lát cắt + Viterbi, rồi kết hợp với cạnh cũ (trọng số cũ 0,3). Cạnh gáy và hai đầu gáy KHÔNG đổi; mép ngoài để tự do (không ép phối cảnh).
+- Áp dụng cho cả tab "Hai trang" (từng trang sau khi tách theo gáy) và tab "Một trang". Tuỳ chọn "Bám biên chính xác từng trang" (mặc định bật).
+- Mô phỏng Python (giấy phẳng, khung hạt giống lệch 6 mm/góc): sai số góc ngoài 7,2 → 4,1 mm, gáy không dịch. Ảnh thật chưa có chuẩn nên chỉ thấy lệch tỉ lệ khổ giảm 0,041 → 0,027.
+- Bám không đủ tin cậy ở cạnh nào thì giữ cạnh cũ. Chưa biên dịch/chạy trên Android.

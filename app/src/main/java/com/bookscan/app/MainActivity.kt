@@ -19,6 +19,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,11 +32,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var spSplit: Spinner
     private lateinit var cbCrop: CheckBox
+    private lateinit var cbContent: CheckBox
     private lateinit var cbDeskew: CheckBox
     private lateinit var cbMerge: CheckBox
     private lateinit var spOutput: Spinner
     private lateinit var spRotate: Spinner
     private lateinit var cbCurve: CheckBox
+    private lateinit var cbTrack: CheckBox
     private lateinit var spCalib: Spinner
     private lateinit var btnCalib: Button
     private lateinit var tvCalib: TextView
@@ -49,6 +52,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etPageH: EditText
     private lateinit var tvSpread: TextView
     private var settingPreset = false
+    private lateinit var tabs: TabLayout
+    private lateinit var tvTitle: TextView
+    private lateinit var splitBox: View
+    private lateinit var singleBox: View
+    private lateinit var spGutter: Spinner
+    private lateinit var cbRowFix: CheckBox
+    private var singleMode = false          // false: tab "Hai trang", true: tab "Một trang"
+    private var lastNote: String? = null
+    private lateinit var mergeBox: View
+    private lateinit var cbHFix: CheckBox
+    private lateinit var etMergeMargin: EditText
+    private lateinit var etGutterMargin: EditText
 
     // Khổ giấy chuẩn: tên, rộng, cao (cm) của MỘT trang. Mục cuối là tuỳ chỉnh.
     private val papers = listOf(
@@ -99,13 +114,25 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Không nạp được OpenCV", Toast.LENGTH_LONG).show()
         }
 
+        tabs = findViewById(R.id.tabs)
+        tvTitle = findViewById(R.id.tvTitle)
+        splitBox = findViewById(R.id.splitBox)
+        singleBox = findViewById(R.id.singleBox)
+        spGutter = findViewById(R.id.spGutter)
+        mergeBox = findViewById(R.id.mergeBox)
+        cbHFix = findViewById(R.id.cbHFix)
+        etMergeMargin = findViewById(R.id.etMergeMargin)
+        etGutterMargin = findViewById(R.id.etGutterMargin)
+        cbRowFix = findViewById(R.id.cbRowFix)
         spSplit = findViewById(R.id.spSplit)
         cbCrop = findViewById(R.id.cbCrop)
+        cbContent = findViewById(R.id.cbContent)
         cbDeskew = findViewById(R.id.cbDeskew)
         cbMerge = findViewById(R.id.cbMerge)
         spOutput = findViewById(R.id.spOutput)
         spRotate = findViewById(R.id.spRotate)
         cbCurve = findViewById(R.id.cbCurve)
+        cbTrack = findViewById(R.id.cbTrack)
         spCalib = findViewById(R.id.spCalib)
         btnCalib = findViewById(R.id.btnCalib)
         tvCalib = findViewById(R.id.tvCalib)
@@ -147,8 +174,20 @@ class MainActivity : AppCompatActivity() {
             listOf("Nguyên gốc (ảnh màu)", "Đen trắng")
         )
         val pf = getSharedPreferences("scan", MODE_PRIVATE)
+        spGutter.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("Gáy ở bên trái trang", "Gáy ở bên phải trang", "Không có gáy (tờ rời)")
+        )
+        spGutter.setSelection(pf.getInt("gs", 2).coerceIn(0, 2))
+        pf.getString("mm", null)?.let { etMergeMargin.setText(it) }
+        pf.getString("gm", null)?.let { etGutterMargin.setText(it) }
+        cbMerge.setOnCheckedChangeListener { _, _ -> applyMode() }
+        cbRowFix.isChecked = pf.getBoolean("rf", true)
+        cbHFix.isChecked = pf.getBoolean("hf", true)
         spRotate.setSelection(pf.getInt("rt", 0).coerceIn(0, 3))
         cbCurve.isChecked = pf.getBoolean("cv", true)
+        cbTrack.isChecked = pf.getBoolean("tk", true)
+        cbContent.isChecked = pf.getBoolean("cc", false)
         spCalib.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
             listOf("Tự động (mặc định)", "Nâng cao (chọn ảnh mẫu)")
@@ -227,7 +266,20 @@ class MainActivity : AppCompatActivity() {
         }
         etPageW.addTextChangedListener(watcher)
         etPageH.addTextChangedListener(watcher)
-        updateSpreadInfo()
+        tabs.addTab(tabs.newTab().setText("Hai trang"))
+        tabs.addTab(tabs.newTab().setText("Một trang"))
+        singleMode = pref.getInt("tab", 0) == 1
+        tabs.getTabAt(if (singleMode) 1 else 0)?.select()
+        tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                singleMode = tab?.position == 1
+                getSharedPreferences("scan", MODE_PRIVATE).edit().putInt("tab", if (singleMode) 1 else 0).apply()
+                applyMode()
+            }
+            override fun onTabUnselected(tab: TabLayout.Tab?) {}
+            override fun onTabReselected(tab: TabLayout.Tab?) {}
+        })
+        applyMode()
         pref.getString("mg3", null)?.let { etMargin.setText(it) }
         pref.getString("cd", null)?.let { etDelay.setText(it) }
         pref.getString("ci", null)?.let { etInterval.setText(it) }
@@ -255,22 +307,47 @@ class MainActivity : AppCompatActivity() {
         profile = profile,
         rotate = intArrayOf(0, 180, 90, 270)[spRotate.selectedItemPosition.coerceIn(0, 3)],
         curve = cbCurve.isChecked,
+        trackEdges = cbTrack.isChecked,
         output = if (spOutput.selectedItemPosition == 0) OutputType.ORIGINAL else OutputType.BW,
         blackBoost = sbInk.progress / 100.0,
         split = SplitMode.values()[spSplit.selectedItemPosition],
         autoCrop = cbCrop.isChecked,
+        cropContent = cbContent.isChecked,
         deskew = cbDeskew.isChecked,
-        merge = cbMerge.isChecked,
-        spreadWcm = 2 * pageW(),   // sách mở ngang: rộng = 2 trang
+        merge = cbMerge.isChecked && !singleMode,
+        // tab Hai trang: sách mở ngang, rộng = 2 trang; tab Một trang: đúng khổ một trang
+        spreadWcm = if (singleMode) pageW() else 2 * pageW(),
         spreadHcm = pageH(),
+        singlePage = singleMode,
+        gutterSide = spGutter.selectedItemPosition.coerceIn(0, 2),
+        rowFix = cbRowFix.isChecked,
+        compressFix = cbHFix.isChecked,
+        mergeMarginCm = signedCm(etMergeMargin),
+        gutterMarginCm = signedCm(etGutterMargin),
         marginCm = (etMargin.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.5).coerceIn(0.0, 5.0)
     )
+
+    private fun signedCm(e: EditText) = (e.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0).coerceIn(-5.0, 5.0)
 
     private fun fmt(v: Double) = if (v == Math.floor(v)) v.toInt().toString() else "%.2f".format(Locale.US, v).trimEnd('0').trimEnd('.')
     private fun pageW() = (etPageW.text.toString().replace(',', '.').toDoubleOrNull() ?: 21.0).coerceIn(5.0, 60.0)
     private fun pageH() = (etPageH.text.toString().replace(',', '.').toDoubleOrNull() ?: 29.7).coerceIn(5.0, 80.0)
     private fun updateSpreadInfo() {
-        tvSpread.text = "Sách mở (2 trang): ${fmt(2 * pageW())} × ${fmt(pageH())} cm – camera chụp ngang"
+        tvSpread.text = if (singleMode)
+            "Một trang: ${fmt(pageW())} × ${fmt(pageH())} cm – chụp thẳng góc, trang chiếm gần đầy khung hình"
+        else
+            "Sách mở (2 trang): ${fmt(2 * pageW())} × ${fmt(pageH())} cm – camera chụp ngang"
+    }
+
+    /** Bật/tắt các tuỳ chọn theo tab đang chọn (Hai trang / Một trang). */
+    private fun applyMode() {
+        tvTitle.text = if (singleMode) "Quét sách – từng trang một" else "Quét sách – tách 2 trang"
+        splitBox.visibility = if (singleMode) View.GONE else View.VISIBLE
+        cbMerge.visibility = if (singleMode) View.GONE else View.VISIBLE
+        cbCrop.visibility = if (singleMode) View.GONE else View.VISIBLE
+        singleBox.visibility = if (singleMode) View.VISIBLE else View.GONE
+        mergeBox.visibility = if (!singleMode && cbMerge.isChecked) View.VISIBLE else View.GONE
+        updateSpreadInfo()
     }
 
     private fun addToQueue(uris: List<Uri>) {
@@ -318,6 +395,13 @@ class MainActivity : AppCompatActivity() {
             .putInt("ot", spOutput.selectedItemPosition)
             .putInt("rt", spRotate.selectedItemPosition)
             .putBoolean("cv", cbCurve.isChecked)
+            .putBoolean("tk", cbTrack.isChecked)
+            .putInt("gs", spGutter.selectedItemPosition)
+            .putString("mm", etMergeMargin.text.toString())
+            .putString("gm", etGutterMargin.text.toString())
+            .putBoolean("rf", cbRowFix.isChecked)
+            .putBoolean("hf", cbHFix.isChecked)
+            .putBoolean("cc", cbContent.isChecked)
             .putInt("cb", spCalib.selectedItemPosition)
             .putInt("ink", sbInk.progress)
             .putString("mg3", etMargin.text.toString()).apply()
@@ -326,12 +410,14 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             var total = 0
             var errors = 0
+            val notes = ArrayList<String>()
             for ((i, uri) in work.withIndex()) {
                 tvStatus.text = "Đang xử lý ảnh ${i + 1}/${work.size}…"
                 try {
                     val outs = withContext(Dispatchers.Default) { processOne(uri, opt) }
                     for ((u, th) in outs) addThumb(u, th)
                     total += outs.size
+                    lastNote?.let { if (it.isNotBlank()) notes.add("Ảnh ${i + 1}: $it") }
                     queue.remove(uri)
                     updateQueueUi()
                 } catch (e: Throwable) {
@@ -340,7 +426,8 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             tvStatus.text = "Xong: $total trang đã lưu vào Pictures/BookScanner" +
-                if (errors > 0) " ($errors ảnh lỗi, còn trong hàng đợi)" else ""
+                (if (errors > 0) " ($errors ảnh lỗi, còn trong hàng đợi)" else "") +
+                (if (notes.isNotEmpty()) "\n" + notes.joinToString("\n") else "")
             setBusy(false)
         }
     }
@@ -348,6 +435,7 @@ class MainActivity : AppCompatActivity() {
     private fun processOne(uri: Uri, opt: ScanOptions): List<Pair<Uri, Bitmap>> {
         val bmp = Exporter.decode(this, uri)
         val res = BookScanner.process(bmp, opt)
+        lastNote = res.note
         bmp.recycle()
         val dpi = Math.round(res.pxPerCm * 2.54).toInt()
         return res.pages.map { p ->
