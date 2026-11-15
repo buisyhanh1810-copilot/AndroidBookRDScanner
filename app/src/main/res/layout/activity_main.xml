@@ -388,6 +388,12 @@
                 android:layout_height="wrap_content"
                 android:checked="true"
                 android:text="Bám biên chính xác từng trang (mép ngoài tự do, gáy giữ nguyên)" />
+            <CheckBox
+                android:id="@+id/cbSoft"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="Làm mềm biên chữ, nối nét đứt (chỉ khi xuất đen trắng)" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
