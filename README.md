@@ -92,3 +92,13 @@ Mô phỏng Python (sai số tổng, cm; V0 = chỉ homography → nắn dọc �
 - Ảnh đang xử lý dở khi màn hình bị hủy vẫn được xử lý và lưu xong (không bị cắt ngang).
 - Nếu app bị crash, nội dung lỗi được ghi vào `crash.txt` (thư mục dữ liệu ngoài của app) và hiện ở dòng trạng thái lần mở sau; file đổi tên thành `crash_last.txt`.
 - Chưa biên dịch/chạy trên Android.
+
+## 1.1.47 – Sửa crash khi mở app (phải xóa dữ liệu mới chạy)
+- Nguyên nhân: khoá cài đặt `"cc"` bị dùng cho hai kiểu khác nhau (ô "cắt theo nội dung" lưu boolean, ô số lần chụp lưu chuỗi). Sau khi dùng cả hai chức năng, đọc sai kiểu gây ClassCastException ngay trong `onCreate` → app tự thoát mỗi lần mở, chỉ hết khi xóa dữ liệu.
+- Sửa: số lần chụp dùng khoá riêng `"cn"`; đọc `"cc"` bằng cách kiểm tra kiểu nên dữ liệu cũ không còn làm crash. Chưa biên dịch/chạy trên Android.
+
+## 1.1.48 – Làm mềm biên chữ, nối nét đứt (xuất đen trắng)
+- Bước đen trắng đổi từ MỘT ngưỡng chung sang HAI ngưỡng (hysteresis): điểm tối hơn ngưỡng (Otsu + độ đậm) là chữ chắc chắn; điểm xám hơn tới +6% chỉ được giữ nếu nối liền với chữ chắc chắn → nét mảnh bị đứt liền lại, nền xám rời rạc không bị đen thêm.
+- Sau đó làm mờ nhẹ (σ 0,7 px) và kéo tương phản đường cong S → biên mượt, ít răng cưa. Kết quả là ảnh xám nhiều mức ở biên (không còn 1 bit thuần).
+- Ô mới "Làm mềm biên chữ, nối nét đứt" (mặc định bật, cả hai tab); tắt thì về cách cũ (một ngưỡng).
+- Mô phỏng Python (chữ mảnh, mực nhạt từng đoạn, độ đậm 11%): tỉ lệ chữ khôi phục 0,974 → 0,996, số mảnh rời giảm 297 → 235 (extra 6%). Cũng làm các chữ sát nhau dễ dính hơn; chưa thử trên ảnh thật, chưa biên dịch trên Android.
