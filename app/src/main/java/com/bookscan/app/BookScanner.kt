@@ -46,7 +46,8 @@ data class ScanOptions(
     val compressFix: Boolean = true,  // kéo giãn chữ bị nén ngang gần gáy (tab Một trang, cần chọn vị trí gáy)
     val mergeMarginCm: Double = 0.0,  // lề quanh ảnh GHÉP 2 trang: dương = thêm lề trắng, âm = cắt lẹm vào
     val gutterMarginCm: Double = 0.0, // khoảng trắng phía gáy của mỗi trang: dương = thêm, âm = cắt bớt
-    val trackEdges: Boolean = true    // bám biên chính xác riêng từng trang (mép ngoài tự do, gáy giữ nguyên)
+    val trackEdges: Boolean = true,   // bám biên chính xác riêng từng trang (mép ngoài tự do, gáy giữ nguyên)
+    val softEdge: Boolean = true      // đen trắng hai ngưỡng (nối nét đứt) + làm mềm biên chữ
 )
 
 /**
@@ -486,17 +487,64 @@ object BookScanner {
         var thr = otsu
         val ink = if (opt.calibAdvanced) opt.profile?.inkRatio ?: 0.0 else 0.0
         if (ink > 0.05 && ink < 0.9) thr = 0.5 * otsu + 0.5 * (255.0 * (1.0 + ink) / 2.0)
+        val strongThr = min(254.0, thr + opt.blackBoost * 255.0)
         val bw = Mat()
-        Imgproc.threshold(gray, bw, min(254.0, thr + opt.blackBoost * 255.0), 255.0, Imgproc.THRESH_BINARY)
+        if (opt.softEdge) hysteresisBw(gray, strongThr, min(254.0, strongThr + 0.06 * 255.0), bw)
+        else Imgproc.threshold(gray, bw, strongThr, 255.0, Imgproc.THRESH_BINARY)
 
-        if (!cropNow) return bw
+        if (!cropNow) return if (opt.softEdge) softenEdges(bw) else bw
         if (!opt.cropContent) {
             // giữ nguyên khổ trang: chỉ xoá vệt tối chạm mép (bóng gáy, mép sách), không cắt theo chữ
             val r = cropToContent(bw, 0)
             if (r !== bw) r.release()
-            return bw
+            return if (opt.softEdge) softenEdges(bw) else bw
         }
-        return cropToContent(bw, (opt.marginCm * pxPerCm).toInt().coerceAtLeast(0))
+        val cropped = cropToContent(bw, (opt.marginCm * pxPerCm).toInt().coerceAtLeast(0))
+        return if (opt.softEdge) softenEdges(cropped) else cropped
+    }
+
+    /**
+     * Phân ngưỡng hai mức: điểm tối hơn [strong] chắc chắn là chữ; điểm xám hơn một chút (tới [loose]) chỉ được giữ
+     * nếu nối liền với điểm chắc chắn. Nét mảnh bị đứt vì chỗ nhạt vẫn liền lại, còn nền/nhiễu xám rời rạc không bị đen thêm.
+     * Kết quả: bw = 0 (chữ) / 255 (nền).
+     */
+    private fun hysteresisBw(gray: Mat, strong: Double, loose: Double, bw: Mat) {
+        val weak = Mat()
+        Imgproc.threshold(gray, weak, loose, 255.0, Imgproc.THRESH_BINARY_INV)   // chữ = 255
+        val str = Mat()
+        Imgproc.threshold(gray, str, strong, 255.0, Imgproc.THRESH_BINARY_INV)
+        val labels = Mat()
+        val n = Imgproc.connectedComponents(weak, labels, 8, CvType.CV_32S)
+        weak.release()
+        val total = gray.rows() * gray.cols()
+        val lab = IntArray(total); labels.get(0, 0, lab); labels.release()
+        val sb = ByteArray(total); str.get(0, 0, sb); str.release()
+        val keep = BooleanArray(n)
+        for (i in 0 until total) if (sb[i].toInt() != 0) keep[lab[i]] = true
+        keep[0] = false
+        val out = ByteArray(total) { if (keep[lab[it]]) 0 else -1 }
+        bw.create(gray.rows(), gray.cols(), CvType.CV_8U)
+        bw.put(0, 0, out)
+    }
+
+    /** Làm mềm biên: làm mờ rất nhẹ ảnh đen trắng rồi kéo tương phản (đường cong S) -> biên mượt, nét mảnh không răng cưa. */
+    private fun softenEdges(bw: Mat): Mat {
+        val f = Mat()
+        bw.convertTo(f, CvType.CV_32F, 1.0 / 255.0)
+        Imgproc.GaussianBlur(f, f, Size(0.0, 0.0), 0.7)
+        // f = độ trắng (1 = nền). smoothstep(0.30 → 0.90): lõi nét giữ đen, biên chuyển xám mềm, nền trắng hẳn
+        val t = Mat()
+        Core.add(f, Scalar(-0.30), t)
+        Core.multiply(t, Scalar(1.0 / 0.6), t)
+        Imgproc.threshold(t, t, 1.0, 1.0, Imgproc.THRESH_TRUNC)
+        Imgproc.threshold(t, t, 0.0, 0.0, Imgproc.THRESH_TOZERO)
+        val t2 = Mat(); Core.multiply(t, t, t2)
+        val k = Mat(); Core.multiply(t, Scalar(-2.0), k); Core.add(k, Scalar(3.0), k)
+        Core.multiply(t2, k, t2)
+        val out = Mat()
+        t2.convertTo(out, CvType.CV_8U, 255.0)
+        f.release(); t.release(); t2.release(); k.release(); bw.release()
+        return out
     }
 
     /**

@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spRotate: Spinner
     private lateinit var cbCurve: CheckBox
     private lateinit var cbTrack: CheckBox
+    private lateinit var cbSoft: CheckBox
     private lateinit var spCalib: Spinner
     private lateinit var btnCalib: Button
     private lateinit var tvCalib: TextView
@@ -134,6 +135,7 @@ class MainActivity : AppCompatActivity() {
         spRotate = findViewById(R.id.spRotate)
         cbCurve = findViewById(R.id.cbCurve)
         cbTrack = findViewById(R.id.cbTrack)
+        cbSoft = findViewById(R.id.cbSoft)
         spCalib = findViewById(R.id.spCalib)
         btnCalib = findViewById(R.id.btnCalib)
         tvCalib = findViewById(R.id.tvCalib)
@@ -188,6 +190,7 @@ class MainActivity : AppCompatActivity() {
         spRotate.setSelection(pf.getInt("rt", 0).coerceIn(0, 3))
         cbCurve.isChecked = pf.getBoolean("cv", true)
         cbTrack.isChecked = pf.getBoolean("tk", true)
+        cbSoft.isChecked = (pf.all["se"] as? Boolean) ?: true
         cbContent.isChecked = (pf.all["cc"] as? Boolean) ?: false   // khoá "cc" từng bị dùng lẫn kiểu chuỗi/boolean -> đọc an toàn
         spCalib.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
@@ -376,6 +379,7 @@ class MainActivity : AppCompatActivity() {
         rotate = intArrayOf(0, 180, 90, 270)[spRotate.selectedItemPosition.coerceIn(0, 3)],
         curve = cbCurve.isChecked,
         trackEdges = cbTrack.isChecked,
+        softEdge = cbSoft.isChecked,
         output = if (spOutput.selectedItemPosition == 0) OutputType.ORIGINAL else OutputType.BW,
         blackBoost = sbInk.progress / 100.0,
         split = SplitMode.values()[spSplit.selectedItemPosition],
@@ -464,6 +468,7 @@ class MainActivity : AppCompatActivity() {
             .putInt("rt", spRotate.selectedItemPosition)
             .putBoolean("cv", cbCurve.isChecked)
             .putBoolean("tk", cbTrack.isChecked)
+            .putBoolean("se", cbSoft.isChecked)
             .putInt("gs", spGutter.selectedItemPosition)
             .putString("mm", etMergeMargin.text.toString())
             .putString("gm", etGutterMargin.text.toString())
