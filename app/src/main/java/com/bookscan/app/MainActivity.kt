@@ -188,7 +188,7 @@ class MainActivity : AppCompatActivity() {
         spRotate.setSelection(pf.getInt("rt", 0).coerceIn(0, 3))
         cbCurve.isChecked = pf.getBoolean("cv", true)
         cbTrack.isChecked = pf.getBoolean("tk", true)
-        cbContent.isChecked = pf.getBoolean("cc", false)
+        cbContent.isChecked = (pf.all["cc"] as? Boolean) ?: false   // khoá "cc" từng bị dùng lẫn kiểu chuỗi/boolean -> đọc an toàn
         spCalib.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
             listOf("Tự động (mặc định)", "Nâng cao (chọn ảnh mẫu)")
@@ -284,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         pref.getString("mg3", null)?.let { etMargin.setText(it) }
         pref.getString("cd", null)?.let { etDelay.setText(it) }
         pref.getString("ci", null)?.let { etInterval.setText(it) }
-        pref.getString("cc", null)?.let { etCount.setText(it) }
+        (pref.all["cn"] as? String)?.let { etCount.setText(it) }
         restoreState(savedInstanceState)
         updateQueueUi()
         showLastCrash()
@@ -437,7 +437,7 @@ class MainActivity : AppCompatActivity() {
         getSharedPreferences("scan", MODE_PRIVATE).edit()
             .putString("cd", etDelay.text.toString())
             .putString("ci", etInterval.text.toString())
-            .putString("cc", etCount.text.toString()).apply()
+            .putString("cn", etCount.text.toString()).apply()
         autoCapture.launch(Intent(this, CaptureActivity::class.java)
             .putExtra(CaptureActivity.EXTRA_DELAY, delaySec)
             .putExtra(CaptureActivity.EXTRA_INTERVAL, intervalSec)
