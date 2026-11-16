@@ -98,7 +98,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSelAll: Button
     private lateinit var btnDelSel: Button
     private lateinit var btnRedo: Button
+    private lateinit var btnShoot: Button
+    private lateinit var btnReplace: Button
+    private var pendingShot: Uri? = null      // file đích của lần chụp thường đang chờ camera hệ thống trả về
+    private var replaceTarget: String? = null // ảnh gốc cũ cần thay (khi chụp/chọn lại)
     private lateinit var btnDelAll: Button
+
+    // Chụp thường: dùng camera hệ thống, 1 ảnh mỗi lần (hướng dọc/ngang do người chụp tự quyết, EXIF lo phần xoay)
+    private val takePic =
+        registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+            val u = pendingShot
+            pendingShot = null
+            if (ok && u != null) onNewImage(u) else replaceTarget = null
+        }
+    private val askCamPerm =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+            if (ok) launchShot() else {
+                replaceTarget = null
+                Toast.makeText(this, "Cần cấp quyền camera để chụp", Toast.LENGTH_LONG).show()
+            }
+        }
+    private val pickOne =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) onNewImage(uri) else replaceTarget = null
+        }
 
     private val pickImages =
         registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
@@ -167,6 +190,10 @@ class MainActivity : AppCompatActivity() {
         btnProcess = findViewById(R.id.btnProcess)
         btnClear = findViewById(R.id.btnClear)
         btnPdf = findViewById(R.id.btnPdf)
+        btnShoot = findViewById(R.id.btnShoot)
+        btnReplace = findViewById(R.id.btnReplace)
+        btnShoot.setOnClickListener { replaceTarget = null; shootOnce() }
+        btnReplace.setOnClickListener { confirmReplace() }
         btnSelAll = findViewById(R.id.btnSelAll)
         btnDelSel = findViewById(R.id.btnDelSel)
         btnRedo = findViewById(R.id.btnRedo)
@@ -316,6 +343,8 @@ class MainActivity : AppCompatActivity() {
         outState.putDoubleArray("sp", saved.map { it.second }.toDoubleArray())
         outState.putStringArrayList("so", ArrayList(srcOf.keys))
         outState.putStringArrayList("ss", ArrayList(srcOf.keys.map { srcOf[it] ?: "" }))
+        outState.putString("ps", pendingShot?.toString())
+        outState.putString("rtg", replaceTarget)
         outState.putInt("ctr", counter)
         outState.putString("stamp", stamp)
     }
@@ -329,6 +358,8 @@ class MainActivity : AppCompatActivity() {
             val so = b.getStringArrayList("so") ?: arrayListOf()
             val ss = b.getStringArrayList("ss") ?: arrayListOf()
             for ((i, k) in so.withIndex()) ss.getOrNull(i)?.let { if (it.isNotEmpty()) srcOf[k] = it }
+            b.getString("ps")?.let { pendingShot = Uri.parse(it) }
+            replaceTarget = b.getString("rtg")
             counter = b.getInt("ctr", 0)
             b.getString("stamp")?.let { stamp = it }
             for ((i, u) in su.withIndex()) saved.add(Uri.parse(u) to (sp.getOrNull(i) ?: 0.0))
@@ -473,6 +504,7 @@ class MainActivity : AppCompatActivity() {
         busy = b
         progress.visibility = if (b) View.VISIBLE else View.GONE
         btnCamera.isEnabled = !b
+        btnShoot.isEnabled = !b
         btnPick.isEnabled = !b
         btnPdf.isEnabled = !b
         updateQueueUi()
@@ -582,6 +614,10 @@ class MainActivity : AppCompatActivity() {
         btnRedo.text = "Xử lý lại đã chọn, thay thế ($n)"
         btnRedo.isEnabled = !busy && n > 0
         btnDelAll.isEnabled = !busy
+        val ns = selected.mapNotNull { srcOf[it] }.distinct().size
+        btnReplace.isEnabled = !busy && ns == 1
+        btnReplace.text = if (n == 0 || ns == 1) "Thay bằng ảnh mới: chụp lại / chọn lại"
+        else "Thay bằng ảnh mới: chọn các trang của MỘT ảnh gốc"
     }
 
     private fun toggleSelectAll() {
@@ -640,6 +676,73 @@ class MainActivity : AppCompatActivity() {
             results.removeAllViews(); thumbOf.clear(); saved.clear(); srcOf.clear(); selected.clear()
             tvStatus.text = if (fail < 0) "Lỗi khi xóa thư mục"
             else "Đã xóa $ok ảnh" + (if (fail > 0) " ($fail ảnh không xóa được: do ứng dụng khác tạo hoặc cần cấp quyền)" else "")
+            setBusy(false)
+        }
+    }
+
+    // ---------------- chụp thường + thay bằng ảnh mới ----------------
+    private fun shootOnce() {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED) launchShot()
+        else askCamPerm.launch(android.Manifest.permission.CAMERA)
+    }
+
+    private fun launchShot() {
+        try {
+            val dir = java.io.File(cacheDir, "images").apply { mkdirs() }
+            val f = java.io.File(dir, "shot_${System.currentTimeMillis()}.jpg")
+            val u = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+            pendingShot = u
+            takePic.launch(u)
+        } catch (e: Throwable) {
+            replaceTarget = null
+            Toast.makeText(this, "Không mở được camera: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Ảnh mới từ camera/thư viện: thêm vào hàng đợi, hoặc (đang thay trang lỗi) xử lý ngay rồi thay bản cũ. */
+    private fun onNewImage(uri: Uri) {
+        val old = replaceTarget
+        replaceTarget = null
+        if (old == null) {
+            addToQueue(listOf(uri))
+            tvStatus.text = "Đã thêm 1 ảnh vào hàng đợi – bấm Xử lý."
+        } else replaceWith(old, uri)
+    }
+
+    private fun confirmReplace() {
+        val srcs = selected.mapNotNull { srcOf[it] }.distinct()
+        if (srcs.size != 1) {
+            Toast.makeText(this, "Hãy chọn các trang thuộc đúng MỘT ảnh gốc", Toast.LENGTH_LONG).show()
+            return
+        }
+        val old = srcs[0]
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Thay trang lỗi bằng ảnh mới")
+            .setMessage("Ảnh mới sẽ được xử lý bằng tùy chọn hiện tại. Nếu thành công, MỌI trang kết quả cũ của ảnh gốc này bị xóa và thay bằng trang mới. Nếu lỗi thì giữ nguyên bản cũ.")
+            .setPositiveButton("Chụp lại") { _, _ -> replaceTarget = old; shootOnce() }
+            .setNeutralButton("Chọn từ thư viện") { _, _ -> replaceTarget = old; pickOne.launch("image/*") }
+            .setNegativeButton("Hủy", null).show()
+    }
+
+    private fun replaceWith(old: String, newUri: Uri) {
+        val opt = options()
+        val oldKeys = srcOf.filter { it.value == old }.keys.toList()
+        setBusy(true)
+        tvStatus.text = "Đang xử lý ảnh mới để thay thế…"
+        lifecycleScope.launch {
+            try {
+                val outs = withContext(Dispatchers.Default + kotlinx.coroutines.NonCancellable) { processOne(newUri, opt) }
+                for (k in oldKeys) {
+                    withContext(Dispatchers.IO) { Exporter.deleteImage(this@MainActivity, Uri.parse(k)) }
+                    forget(k)
+                }
+                for ((u, th) in outs) addThumb(u, th)
+                tvStatus.text = "Đã thay ${oldKeys.size} trang cũ bằng ${outs.size} trang mới." +
+                    (lastNote?.let { if (it.isNotBlank()) "\n$it" else "" } ?: "")
+            } catch (e: Throwable) {
+                tvStatus.text = "Lỗi khi xử lý ảnh mới: ${e.message} – giữ nguyên bản cũ."
+            }
             setBusy(false)
         }
     }
