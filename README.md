@@ -114,3 +114,12 @@ Mô phỏng Python (sai số tổng, cm; V0 = chỉ homography → nắn dọc �
 - Tab "Một trang": màn hình chụp tự động ở chế độ DỌC (trang khổ dọc chiếm đầy khung, nhiều điểm ảnh hơn, không cần xoay ảnh). Tab "Hai trang": vẫn NGANG như trước.
 - Hướng ảnh vẫn do EXIF xử lý (CameraX ghi theo hướng màn hình lúc chụp).
 - Chưa biên dịch/chạy trên Android.
+
+## 1.1.51 – Chụp thường (không tự động) + thay trang lỗi bằng ảnh mới
+- Nút **"Chụp thường (1 ảnh, không tự động)"**: mở camera hệ thống chụp đúng 1 ảnh, thêm vào hàng đợi. Hướng dọc/ngang do người chụp tự quyết (EXIF lo phần xoay). Tự xin quyền camera nếu chưa có.
+- Nút **"Thay bằng ảnh mới: chụp lại / chọn lại"**: chọn các trang của MỘT ảnh gốc bị lỗi → chọn "Chụp lại" hoặc "Chọn lại từ thư viện" → ảnh mới được xử lý bằng tùy chọn hiện tại; nếu thành công thì xóa mọi trang cũ của ảnh gốc đó và thay bằng trang mới, nếu lỗi thì giữ bản cũ.
+- Trạng thái chờ chụp/chọn được giữ khi màn hình bị tạo lại (camera hệ thống có thể làm app bị đóng nền).
+- Chưa biên dịch/chạy trên Android.
+
+## 1.1.52 – Sửa hộp thoại "Thay bằng ảnh mới"
+- Lỗi 1.1.51: hộp thoại dùng đồng thời `setMessage` và `setItems` nên danh sách "Chụp lại / Chọn lại" không hiện. Đổi thành 3 nút: **Chụp lại**, **Chọn từ thư viện**, **Hủy**.
