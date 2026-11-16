@@ -93,6 +93,14 @@
                     android:text="Chọn nhiều ảnh"
                     android:textSize="14sp" />
             </LinearLayout>
+            <Button
+                android:id="@+id/btnShoot"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:minHeight="52dp"
+                android:text="Chụp thường (1 ảnh, không tự động)" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -584,6 +592,12 @@
                 android:layout_weight="1"
                 android:text="Xóa đã chọn (0)" />
         </LinearLayout>
+        <Button
+            android:id="@+id/btnReplace"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Thay bằng ảnh mới: chụp lại / chọn lại" />
         <Button
             android:id="@+id/btnRedo"
             style="@style/Widget.Material3.Button.TonalButton"
