@@ -43,6 +43,7 @@ class CaptureActivity : AppCompatActivity() {
         const val EXTRA_DELAY = "delay"        // giây chờ trước ảnh đầu
         const val EXTRA_INTERVAL = "interval"  // giây giữa các ảnh
         const val EXTRA_COUNT = "count"        // 0 = không giới hạn
+        const val EXTRA_PORTRAIT = "portrait"  // true: chụp DỌC (tab Một trang); false: chụp NGANG (tab Hai trang)
         const val RESULT_URIS = "uris"
     }
 
@@ -69,6 +70,10 @@ class CaptureActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Hướng màn hình theo chế độ: một trang -> dọc (trang khổ dọc chiếm đầy khung), hai trang -> ngang (sách mở)
+        requestedOrientation = if (intent.getBooleanExtra(EXTRA_PORTRAIT, false))
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         setContentView(R.layout.activity_capture)
         preview = findViewById(R.id.preview)
         tvInfo = findViewById(R.id.tvInfo)

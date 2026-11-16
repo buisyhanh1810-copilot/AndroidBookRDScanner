@@ -29,8 +29,7 @@
         <activity
             android:name=".CaptureActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="sensorLandscape" />
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

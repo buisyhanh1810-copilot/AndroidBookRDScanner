@@ -92,6 +92,13 @@ class MainActivity : AppCompatActivity() {
     private val queue = mutableListOf<Uri>()      // ảnh gốc chờ xử lý
     private val saved = mutableListOf<Pair<Uri, Double>>()   // trang đã lưu + px/cm
     private var busy = false
+    private val srcOf = HashMap<String, String>()        // ảnh kết quả -> ảnh gốc (để xử lý lại/thay thế)
+    private val selected = HashSet<String>()             // ảnh kết quả đang chọn
+    private val thumbOf = HashMap<String, View>()        // ảnh kết quả -> khung hiển thị
+    private lateinit var btnSelAll: Button
+    private lateinit var btnDelSel: Button
+    private lateinit var btnRedo: Button
+    private lateinit var btnDelAll: Button
 
     private val pickImages =
         registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
@@ -160,6 +167,14 @@ class MainActivity : AppCompatActivity() {
         btnProcess = findViewById(R.id.btnProcess)
         btnClear = findViewById(R.id.btnClear)
         btnPdf = findViewById(R.id.btnPdf)
+        btnSelAll = findViewById(R.id.btnSelAll)
+        btnDelSel = findViewById(R.id.btnDelSel)
+        btnRedo = findViewById(R.id.btnRedo)
+        btnDelAll = findViewById(R.id.btnDelAll)
+        btnSelAll.setOnClickListener { toggleSelectAll() }
+        btnDelSel.setOnClickListener { confirmDeleteSelected() }
+        btnRedo.setOnClickListener { confirmRedoSelected() }
+        btnDelAll.setOnClickListener { confirmDeleteAll() }
 
         spSplit.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
@@ -299,6 +314,8 @@ class MainActivity : AppCompatActivity() {
         outState.putStringArrayList("q", ArrayList(queue.map { it.toString() }))
         outState.putStringArrayList("su", ArrayList(saved.map { it.first.toString() }))
         outState.putDoubleArray("sp", saved.map { it.second }.toDoubleArray())
+        outState.putStringArrayList("so", ArrayList(srcOf.keys))
+        outState.putStringArrayList("ss", ArrayList(srcOf.keys.map { srcOf[it] ?: "" }))
         outState.putInt("ctr", counter)
         outState.putString("stamp", stamp)
     }
@@ -309,6 +326,9 @@ class MainActivity : AppCompatActivity() {
             b.getStringArrayList("q")?.forEach { queue.add(Uri.parse(it)) }
             val su = b.getStringArrayList("su") ?: arrayListOf()
             val sp = b.getDoubleArray("sp") ?: DoubleArray(0)
+            val so = b.getStringArrayList("so") ?: arrayListOf()
+            val ss = b.getStringArrayList("ss") ?: arrayListOf()
+            for ((i, k) in so.withIndex()) ss.getOrNull(i)?.let { if (it.isNotEmpty()) srcOf[k] = it }
             counter = b.getInt("ctr", 0)
             b.getString("stamp")?.let { stamp = it }
             for ((i, u) in su.withIndex()) saved.add(Uri.parse(u) to (sp.getOrNull(i) ?: 0.0))
@@ -445,7 +465,8 @@ class MainActivity : AppCompatActivity() {
         autoCapture.launch(Intent(this, CaptureActivity::class.java)
             .putExtra(CaptureActivity.EXTRA_DELAY, delaySec)
             .putExtra(CaptureActivity.EXTRA_INTERVAL, intervalSec)
-            .putExtra(CaptureActivity.EXTRA_COUNT, count))
+            .putExtra(CaptureActivity.EXTRA_COUNT, count)
+            .putExtra(CaptureActivity.EXTRA_PORTRAIT, singleMode))
     }
 
     private fun setBusy(b: Boolean) {
@@ -455,6 +476,7 @@ class MainActivity : AppCompatActivity() {
         btnPick.isEnabled = !b
         btnPdf.isEnabled = !b
         updateQueueUi()
+        if (::btnDelSel.isInitialized) updateSelUi()
     }
 
     private fun processQueue() {
@@ -518,11 +540,14 @@ class MainActivity : AppCompatActivity() {
             val th = Bitmap.createScaledBitmap(p, 500, (500f * p.height / p.width).toInt().coerceAtLeast(1), true)
             p.recycle()
             saved.add(u to res.pxPerCm)
+            srcOf[u.toString()] = uri.toString()
             u to th
         }
     }
 
     private fun addThumb(uri: Uri, th: Bitmap) {
+        val key = uri.toString()
+        val frame = android.widget.FrameLayout(this)
         val iv = ImageView(this).apply {
             setImageBitmap(th)
             adjustViewBounds = true
@@ -532,8 +557,132 @@ class MainActivity : AppCompatActivity() {
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
             }
         }
-        results.addView(iv, LinearLayout.LayoutParams(
+        val cb = CheckBox(this).apply {
+            isChecked = key in selected
+            setOnCheckedChangeListener { _, c -> if (c) selected.add(key) else selected.remove(key); updateSelUi() }
+        }
+        frame.addView(iv, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
+        frame.addView(cb, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+            android.view.Gravity.TOP or android.view.Gravity.START))
+        results.addView(frame, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        thumbOf[key] = frame
+        updateSelUi()
+    }
+
+    // ---------------- chọn / xóa / xử lý lại thay thế ----------------
+    private fun updateSelUi() {
+        val n = selected.size
+        btnSelAll.text = if (thumbOf.isNotEmpty() && n == thumbOf.size) "Bỏ chọn" else "Chọn tất cả"
+        btnSelAll.isEnabled = !busy && thumbOf.isNotEmpty()
+        btnDelSel.text = "Xóa đã chọn ($n)"
+        btnDelSel.isEnabled = !busy && n > 0
+        btnRedo.text = "Xử lý lại đã chọn, thay thế ($n)"
+        btnRedo.isEnabled = !busy && n > 0
+        btnDelAll.isEnabled = !busy
+    }
+
+    private fun toggleSelectAll() {
+        val all = thumbOf.isNotEmpty() && selected.size == thumbOf.size
+        for (v in thumbOf.values.toList()) ((v as android.widget.FrameLayout).getChildAt(1) as CheckBox).isChecked = !all
+        updateSelUi()
+    }
+
+    /** Bỏ một ảnh kết quả khỏi giao diện và danh sách (không xóa file). */
+    private fun forget(key: String) {
+        thumbOf.remove(key)?.let { results.removeView(it) }
+        saved.removeAll { it.first.toString() == key }
+        srcOf.remove(key)
+        selected.remove(key)
+    }
+
+    private fun confirmDeleteSelected() {
+        val n = selected.size
+        if (n == 0) return
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Xóa $n ảnh đã chọn?")
+            .setMessage("Ảnh bị xóa khỏi thư mục Pictures/BookScanner. Không hoàn tác được.")
+            .setPositiveButton("Xóa") { _, _ -> deleteSelected() }
+            .setNegativeButton("Hủy", null).show()
+    }
+
+    private fun deleteSelected() {
+        val keys = selected.toList()
+        setBusy(true)
+        lifecycleScope.launch {
+            var ok = 0
+            for (k in keys) {
+                val done = withContext(Dispatchers.IO) { Exporter.deleteImage(this@MainActivity, Uri.parse(k)) }
+                if (done) { ok++; forget(k) }
+            }
+            tvStatus.text = "Đã xóa $ok/${keys.size} ảnh" +
+                (if (ok < keys.size) " (${keys.size - ok} ảnh không xóa được: có thể đã bị xóa trước đó hoặc do ứng dụng khác tạo)" else "")
+            setBusy(false)
+        }
+    }
+
+    private fun confirmDeleteAll() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Xóa TOÀN BỘ ảnh trong thư mục đã xử lý?")
+            .setMessage("Xóa mọi ảnh trong Pictures/BookScanner mà ứng dụng này đã tạo (cả các lần trước). Không hoàn tác được. File PDF trong Download/BookScanner không bị xóa.")
+            .setPositiveButton("Xóa tất cả") { _, _ -> deleteAll() }
+            .setNegativeButton("Hủy", null).show()
+    }
+
+    private fun deleteAll() {
+        setBusy(true)
+        lifecycleScope.launch {
+            val (ok, fail) = withContext(Dispatchers.IO) {
+                try { Exporter.deleteAllScans(this@MainActivity) } catch (e: Throwable) { 0 to -1 }
+            }
+            results.removeAllViews(); thumbOf.clear(); saved.clear(); srcOf.clear(); selected.clear()
+            tvStatus.text = if (fail < 0) "Lỗi khi xóa thư mục"
+            else "Đã xóa $ok ảnh" + (if (fail > 0) " ($fail ảnh không xóa được: do ứng dụng khác tạo hoặc cần cấp quyền)" else "")
+            setBusy(false)
+        }
+    }
+
+    private fun confirmRedoSelected() {
+        val srcs = selected.mapNotNull { srcOf[it] }.distinct()
+        if (srcs.isEmpty()) {
+            Toast.makeText(this, "Không còn ảnh gốc của các ảnh đã chọn (đã mở lại app từ đầu)", Toast.LENGTH_LONG).show()
+            return
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Xử lý lại ${srcs.size} ảnh gốc?")
+            .setMessage("Xử lý lại bằng các tùy chọn hiện tại. Nếu thành công, MỌI trang kết quả cũ của ảnh gốc đó (kể cả trang không được chọn) bị xóa và thay bằng trang mới. Nếu xử lý lỗi thì giữ nguyên bản cũ.")
+            .setPositiveButton("Xử lý lại") { _, _ -> redoSelected(srcs) }
+            .setNegativeButton("Hủy", null).show()
+    }
+
+    private fun redoSelected(srcs: List<String>) {
+        val opt = options()
+        setBusy(true)
+        lifecycleScope.launch {
+            var done = 0
+            var errors = 0
+            for ((i, src) in srcs.withIndex()) {
+                tvStatus.text = "Đang xử lý lại ảnh ${i + 1}/${srcs.size}…"
+                val oldKeys = srcOf.filter { it.value == src }.keys.toList()
+                try {
+                    val outs = withContext(Dispatchers.Default + kotlinx.coroutines.NonCancellable) { processOne(Uri.parse(src), opt) }
+                    for (k in oldKeys) {
+                        withContext(Dispatchers.IO) { Exporter.deleteImage(this@MainActivity, Uri.parse(k)) }
+                        forget(k)
+                    }
+                    for ((u, th) in outs) addThumb(u, th)
+                    done++
+                } catch (e: Throwable) {
+                    errors++
+                    tvStatus.text = "Lỗi khi xử lý lại ảnh ${i + 1}: ${e.message}"
+                }
+            }
+            tvStatus.text = "Đã thay thế kết quả của $done/${srcs.size} ảnh gốc" +
+                (if (errors > 0) " ($errors ảnh lỗi, giữ nguyên bản cũ)" else "")
+            setBusy(false)
+        }
     }
 
     private fun exportPdf() {

@@ -557,6 +557,46 @@
             android:layout_marginTop="16dp"
             android:text="Gộp các trang đã quét thành PDF" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Quản lý ảnh đã xử lý (tích ô ở góc ảnh để chọn)"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="12sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/btnSelAll"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Chọn tất cả" />
+            <Button
+                android:id="@+id/btnDelSel"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Xóa đã chọn (0)" />
+        </LinearLayout>
+        <Button
+            android:id="@+id/btnRedo"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Xử lý lại đã chọn, thay thế (0)" />
+        <Button
+            android:id="@+id/btnDelAll"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Xóa toàn bộ ảnh trong thư mục đã xử lý" />
+
         <ProgressBar
             android:id="@+id/progress"
             style="?android:attr/progressBarStyleHorizontal"

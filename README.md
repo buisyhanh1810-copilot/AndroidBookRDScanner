@@ -102,3 +102,15 @@ Mô phỏng Python (sai số tổng, cm; V0 = chỉ homography → nắn dọc �
 - Sau đó làm mờ nhẹ (σ 0,7 px) và kéo tương phản đường cong S → biên mượt, ít răng cưa. Kết quả là ảnh xám nhiều mức ở biên (không còn 1 bit thuần).
 - Ô mới "Làm mềm biên chữ, nối nét đứt" (mặc định bật, cả hai tab); tắt thì về cách cũ (một ngưỡng).
 - Mô phỏng Python (chữ mảnh, mực nhạt từng đoạn, độ đậm 11%): tỉ lệ chữ khôi phục 0,974 → 0,996, số mảnh rời giảm 297 → 235 (extra 6%). Cũng làm các chữ sát nhau dễ dính hơn; chưa thử trên ảnh thật, chưa biên dịch trên Android.
+
+## 1.1.49 – Quản lý ảnh đã xử lý: chọn, xóa, xử lý lại thay thế
+- Mỗi ảnh kết quả có ô tích ở góc trái trên; nút "Chọn tất cả / Bỏ chọn".
+- **Xóa đã chọn**: xóa file ảnh khỏi Pictures/BookScanner và khỏi danh sách (có hỏi xác nhận).
+- **Xử lý lại đã chọn, thay thế**: xử lý lại ảnh gốc bằng tùy chọn hiện tại; nếu thành công thì xóa MỌI trang kết quả cũ của ảnh gốc đó và thay bằng trang mới; nếu lỗi thì giữ bản cũ. Cần ảnh gốc còn truy cập được (trong phiên làm việc hiện tại; thông tin ảnh gốc được giữ khi màn hình bị tạo lại nhưng mất khi mở lại app từ đầu).
+- **Xóa toàn bộ ảnh trong thư mục đã xử lý**: xóa mọi ảnh trong Pictures/BookScanner mà app có quyền xóa (có hỏi xác nhận). Ảnh do ứng dụng khác tạo (hoặc do bản app ký khác) không xóa được và được báo số lượng. File PDF trong Download/BookScanner không bị xóa.
+- Chưa biên dịch/chạy trên Android.
+
+## 1.1.50 – Camera tự động theo tab: một trang chụp dọc, hai trang chụp ngang
+- Tab "Một trang": màn hình chụp tự động ở chế độ DỌC (trang khổ dọc chiếm đầy khung, nhiều điểm ảnh hơn, không cần xoay ảnh). Tab "Hai trang": vẫn NGANG như trước.
+- Hướng ảnh vẫn do EXIF xử lý (CameraX ghi theo hướng màn hình lúc chụp).
+- Chưa biên dịch/chạy trên Android.

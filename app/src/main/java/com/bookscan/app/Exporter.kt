@@ -109,4 +109,25 @@ object Exporter {
         cr.update(uri, v, null, null)
         return uri
     }
+
+    /** Xóa một ảnh do app tạo. Trả về false nếu không xóa được (đã mất, hoặc không thuộc app này). */
+    fun deleteImage(ctx: Context, uri: Uri): Boolean = try {
+        ctx.contentResolver.delete(uri, null, null) > 0
+    } catch (e: SecurityException) { false } catch (e: Exception) { false }
+
+    /** Xóa mọi ảnh trong Pictures/BookScanner mà app này có quyền xóa. Trả về (đã xóa, không xóa được). */
+    fun deleteAllScans(ctx: Context): Pair<Int, Int> {
+        val cr = ctx.contentResolver
+        val ids = ArrayList<Long>()
+        cr.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media._ID),
+            "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ?", arrayOf("Pictures/BookScanner%"), null
+        )?.use { c -> while (c.moveToNext()) ids.add(c.getLong(0)) }
+        var ok = 0; var fail = 0
+        for (id in ids) {
+            val u = android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+            if (deleteImage(ctx, u)) ok++ else fail++
+        }
+        return ok to fail
+    }
 }
