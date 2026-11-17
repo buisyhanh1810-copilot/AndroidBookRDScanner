@@ -23,7 +23,8 @@
             android:id="@+id/btnOpen"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:maxLines="2"
@@ -36,11 +37,12 @@
             android:id="@+id/btnFirst"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_marginStart="6dp"
             android:layout_weight="1"
             android:maxLines="2"
-            android:text="Dùng ảnh đầu hàng đợi"
+            android:text="Ảnh đầu hàng đợi"
             android:textSize="13sp" />
     </LinearLayout>
 

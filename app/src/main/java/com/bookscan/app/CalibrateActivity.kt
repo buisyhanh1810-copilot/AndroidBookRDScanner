@@ -82,8 +82,8 @@ class CalibrateActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        tvHelp.text = "Kéo ngón tay khoanh vùng: Nền (xanh dương), Giấy (xanh lá), Chữ (đỏ, tuỳ chọn). " +
-            "Đã chọn: nền ${picker.count(0)}, giấy ${picker.count(1)}, chữ ${picker.count(2)} (mỗi loại tối đa ${RegionPickerView.MAX_PER_TYPE} vùng)."
+        tvHelp.text = "Kéo ngón tay khoanh vùng nền (xanh dương), giấy (xanh lá), chữ (đỏ, tùy chọn).\n" +
+            "Đã chọn: nền ${picker.count(0)} · giấy ${picker.count(1)} · chữ ${picker.count(2)} (tối đa ${RegionPickerView.MAX_PER_TYPE} mỗi loại)"
         btnSave.isEnabled = picker.image() != null && picker.count(0) > 0 && picker.count(1) > 0
     }
 
@@ -129,7 +129,7 @@ class CalibrateActivity : AppCompatActivity() {
         )
         rgba.release(); bgr.release(); lab.release()
         if (prof == null) {
-            Toast.makeText(this, "Vùng giấy quá nhỏ – hãy khoanh vùng lớn hơn", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Vùng giấy quá nhỏ, khoanh lớn hơn", Toast.LENGTH_LONG).show()
             return
         }
         getSharedPreferences("scan", MODE_PRIVATE).edit().putString(PREF_PROFILE, prof.toJson()).apply()

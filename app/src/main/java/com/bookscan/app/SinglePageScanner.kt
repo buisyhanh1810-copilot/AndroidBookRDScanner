@@ -38,12 +38,12 @@ object SinglePageScanner {
         var q = try { EdgeDetector.detectPageQuad(img, pwCm, phCm) } catch (e: Exception) { null }
         if (q == null) {
             q = try { BookScanner.detectQuad(img) } catch (e: Exception) { null }
-            if (q != null) notes.add("Không thấy khối chữ, dùng vùng giấy sáng làm khung – nên kiểm tra lại ảnh.")
+            if (q != null) notes.add("Không thấy chữ, lấy vùng giấy sáng làm khung. Nên kiểm tra.")
         }
-        if (q == null) throw IllegalStateException("Không tìm thấy trang trong ảnh")
+        if (q == null) throw IllegalStateException("Không thấy trang trong ảnh")
 
         val ar = aspectError(q, img.cols(), img.rows(), pwCm / phCm)
-        if (ar > 0.10) notes.add("Khung dò được lệch khổ giấy ${Math.round(ar * 100)}% (có thể khung sai hoặc chụp lệch nhiều).")
+        if (ar > 0.10) notes.add("Khung lệch khổ giấy ${Math.round(ar * 100)}%: có thể sai khung hoặc chụp nghiêng.")
 
         // px/cm: theo độ phân giải thật của ảnh, tối đa 300 dpi
         val pxW = (hypot(q[1].x - q[0].x, q[1].y - q[0].y) + hypot(q[2].x - q[3].x, q[2].y - q[3].y)) / 2
@@ -78,7 +78,7 @@ object SinglePageScanner {
         if (opt.trackEdges && q2 != null) {
             val skip = when (opt.gutterSide) { GUTTER_LEFT -> 3; GUTTER_RIGHT -> 1; else -> null }
             val t = try { EdgeTracker.refineCrop(img, mm, q2, q, pwCm, phCm, skip) } catch (e: Throwable) { null }
-            if (t != null) { q2 = t; notes.add("Đã bám biên chính xác từng cạnh.") }
+            if (t != null) { q2 = t; notes.add("Đã bám biên.") }
         }
 
         var page: Mat? = null
@@ -108,7 +108,7 @@ object SinglePageScanner {
             if (r != null) {
                 if (r.mat !== page) { page!!.release(); page = r.mat }
                 notes.add(r.note)
-            } else notes.add("Không nắn dòng chữ (ít hàng chữ, ảnh đã thẳng hoặc không đủ tin cậy).")
+            } else notes.add("Không nắn hàng chữ (ít chữ hoặc đã thẳng).")
         }
 
         // BƯỚC 4: chữ bị nén ngang gần gáy (sách dày) – chỉ khi biết cạnh gáy và nén đủ rõ
@@ -335,7 +335,7 @@ object RowStraightener {
         val out = Mat()
         Imgproc.remap(page, out, mapX, mapY, Imgproc.INTER_CUBIC, Core.BORDER_REPLICATE)
         mapX.release(); mapY.release()
-        val note = "Nắn dòng chữ: nghiêng %.2f°, %d hàng, lệch tối đa ≈ %.1f mm.".format(bestT, rows.size, worstMm)
+        val note = "Nắn chữ: nghiêng %.2f°, %d hàng, lệch ≤ %.1f mm.".format(bestT, rows.size, worstMm)
         return Result(out, note)
     }
 

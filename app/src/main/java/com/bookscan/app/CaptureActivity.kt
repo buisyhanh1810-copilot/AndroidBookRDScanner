@@ -63,7 +63,7 @@ class CaptureActivity : AppCompatActivity() {
     private val askCamera =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
             if (ok) startCamera() else {
-                Toast.makeText(this, "Cần cấp quyền camera để chụp", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Cần quyền camera", Toast.LENGTH_LONG).show()
                 finishWithResult()
             }
         }
@@ -127,9 +127,9 @@ class CaptureActivity : AppCompatActivity() {
                 first = false
                 while (remain > 0) {
                     if (paused) {
-                        showInfo("TẠM DỪNG – đã chụp ${taken.size}${total(maxCount)}")
+                        showInfo("Tạm dừng · ${taken.size}${total(maxCount)} ảnh")
                     } else {
-                        showInfo("Chụp sau %.1f s – đã chụp %d%s".format(remain / 1000.0, taken.size, total(maxCount)))
+                        showInfo("Chụp sau %.1f s · %d%s ảnh".format(remain / 1000.0, taken.size, total(maxCount)))
                         remain -= 100
                     }
                     delay(100)

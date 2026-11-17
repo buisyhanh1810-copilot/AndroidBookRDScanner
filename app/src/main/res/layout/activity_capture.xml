@@ -19,7 +19,9 @@
         android:background="#99000000"
         android:padding="8dp"
         android:textColor="#FFFFFF"
-        android:textSize="18sp" />
+        android:gravity="center"
+        android:maxLines="2"
+        android:textSize="16sp" />
 
     <View
         android:id="@+id/flash"
@@ -29,23 +31,28 @@
         android:visibility="gone" />
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="end|center_vertical"
-        android:layout_margin="16dp"
-        android:orientation="vertical">
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:padding="16dp">
 
         <Button
             android:id="@+id/btnPause"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:minHeight="52dp"
             android:text="Tạm dừng" />
 
         <Button
             android:id="@+id/btnStop"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:minHeight="52dp"
             android:text="Dừng và lưu" />
     </LinearLayout>
 </FrameLayout>

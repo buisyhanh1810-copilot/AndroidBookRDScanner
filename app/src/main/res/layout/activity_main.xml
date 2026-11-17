@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -28,7 +29,7 @@
             android:id="@+id/tvTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Quét sách – tách 2 trang"
+            android:text="Quét sách – 2 trang"
             android:textAppearance="?attr/textAppearanceHeadlineSmall"
             android:textStyle="bold" />
 
@@ -54,7 +55,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="1. Chụp hoặc chọn ảnh"
+                    android:text="1. Nhập ảnh"
                     android:textAppearance="?attr/textAppearanceTitleMedium"
                     android:textStyle="bold" />
 
@@ -90,7 +91,7 @@
                     android:layout_marginStart="6dp"
                     android:layout_marginEnd="0dp"
                     android:maxLines="2"
-                    android:text="Chọn nhiều ảnh"
+                    android:text="Chọn ảnh"
                     android:textSize="14sp" />
             </LinearLayout>
             <Button
@@ -100,12 +101,12 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:minHeight="52dp"
-                android:text="Chụp thường (1 ảnh, không tự động)" />
+                android:text="Chụp thường (1 ảnh)" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Hẹn giờ chụp tự động (camera tự chạy, có nút Tạm dừng)"
+                android:text="Hẹn giờ chụp tự động"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
             <LinearLayout
@@ -173,7 +174,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Chờ = trước ảnh đầu (s = giây) · Cách = giữa các ảnh · Số ảnh 0 = chụp đến khi bấm Dừng"
+                android:text="Chờ: trước ảnh đầu · Cách: giữa các ảnh · Số ảnh 0: chụp đến khi Dừng"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
             </LinearLayout>
@@ -202,7 +203,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Hàng đợi: 0 ảnh" />
+                android:text="0 ảnh" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -221,7 +222,7 @@
                     android:layout_marginStart="0dp"
                     android:layout_marginEnd="6dp"
                     android:maxLines="2"
-                    android:text="Xử lý hàng đợi"
+                    android:text="Xử lý"
                     android:textSize="14sp" />
                 <Button
                     android:paddingStart="8dp"
@@ -235,7 +236,7 @@
                     android:layout_marginStart="6dp"
                     android:layout_marginEnd="0dp"
                     android:maxLines="2"
-                    android:text="Xoá hết"
+                    android:text="Xoá"
                     android:textSize="14sp" />
             </LinearLayout>
             </LinearLayout>
@@ -263,7 +264,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Loại giấy (kích thước 1 trang)"
+                android:text="Khổ giấy (1 trang)"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
             <Spinner
@@ -329,7 +330,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Tách đôi trang"
+                android:text="Tách trang"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
             <Spinner
@@ -347,7 +348,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Vị trí gáy sách trên trang (để nắn đúng phía cong)"
+                android:text="Vị trí gáy"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
             <Spinner
@@ -359,19 +360,19 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Nắn nghiêng và xòe theo hàng chữ (cần trang có nhiều dòng chữ)" />
+                android:text="Nắn theo hàng chữ (cần nhiều dòng chữ)" />
             <CheckBox
                 android:id="@+id/cbHFix"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Kéo giãn chữ bị nén ngang gần gáy (sách dày; cần chọn vị trí gáy, chỉ nắn khi nén rõ)" />
+                android:text="Giãn chữ bị nén gần gáy (sách dày)" />
             </LinearLayout>
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Xoay ảnh trước khi xử lý (ảnh bị ngược/nghiêng)"
+                android:text="Xoay ảnh trước khi xử lý"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
             <Spinner
@@ -383,30 +384,30 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Tự phát hiện viền sách và nắn phẳng" />
+                android:text="Tự dò viền sách, nắn phẳng" />
             <CheckBox
                 android:id="@+id/cbCurve"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Nắn cong theo mép giấy (trang cong lên/xuống)" />
+                android:text="Nắn theo mép cong" />
             <CheckBox
                 android:id="@+id/cbTrack"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Bám biên chính xác từng trang (mép ngoài tự do, gáy giữ nguyên)" />
+                android:text="Bám biên từng trang (giữ nguyên gáy)" />
             <CheckBox
                 android:id="@+id/cbSoft"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Làm mềm biên chữ, nối nét đứt (chỉ khi xuất đen trắng)" />
+                android:text="Làm mềm chữ, nối nét đứt (đen trắng)" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Hiệu chuẩn nền / giấy / chữ" />
+                android:text="Hiệu chuẩn màu" />
             <Spinner
                 android:id="@+id/spCalib"
                 android:layout_width="match_parent"
@@ -416,7 +417,7 @@
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
-                android:text="Chọn ảnh mẫu &amp; vùng nền/giấy/chữ…" />
+                android:text="Chọn ảnh mẫu, vùng nền/giấy/chữ" />
             <TextView
                 android:id="@+id/tvCalib"
                 android:layout_width="match_parent"
@@ -427,13 +428,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="false"
-                android:text="Cắt theo khối nội dung (bỏ chọn = giữ nguyên khổ trang, đúng khi trang ít chữ)" />
+                android:text="Cắt theo khối chữ (bỏ chọn: giữ khổ giấy)" />
             <CheckBox
                 android:id="@+id/cbDeskew"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Tự chỉnh nghiêng dòng chữ" />
+                android:text="Tự chỉnh nghiêng chữ" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
         <com.google.android.material.card.MaterialCardView
@@ -459,7 +460,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Loại ảnh lưu"
+                android:text="Kiểu ảnh lưu"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
             <Spinner
@@ -477,7 +478,7 @@
                     android:id="@+id/tvInk"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Độ đậm đen trắng: +5%" />
+                    android:text="Độ đậm: +5%" />
 
                 <SeekBar
                     android:id="@+id/sbInk"
@@ -499,7 +500,7 @@
                     android:layout_weight="0"
                     android:layout_marginStart="0dp"
                     android:layout_marginEnd="0dp"
-                    android:hint="Lề dư quanh nội dung (cm)">
+                    android:hint="Lề quanh chữ (cm)">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etMargin"
@@ -528,7 +529,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="Lề quanh ảnh ghép (cm, âm = cắt lẹm vào)">
+                    android:hint="Lề ảnh ghép (cm)"
+                app:helperText="Âm = cắt lẹm">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etMergeMargin"
                         android:layout_width="match_parent"
@@ -544,7 +546,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="Khoảng trắng phía gáy mỗi trang (cm, âm = cắt bớt)">
+                android:hint="Chừa gáy (cm)"
+                app:helperText="Âm = cắt bớt">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etGutterMargin"
                     android:layout_width="match_parent"
@@ -563,13 +566,13 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginTop="16dp"
-            android:text="Gộp các trang đã quét thành PDF" />
+            android:text="Gộp thành PDF" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Quản lý ảnh đã xử lý (tích ô ở góc ảnh để chọn)"
+            android:text="Quản lý ảnh (tích ô góc ảnh để chọn)"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="12sp" />
         <LinearLayout
@@ -590,26 +593,26 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:text="Xóa đã chọn (0)" />
+                android:text="Xóa (0)" />
         </LinearLayout>
         <Button
             android:id="@+id/btnReplace"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Thay bằng ảnh mới: chụp lại / chọn lại" />
+            android:text="Thay bằng ảnh mới" />
         <Button
             android:id="@+id/btnRedo"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Xử lý lại đã chọn, thay thế (0)" />
+            android:text="Xử lý lại (0)" />
         <Button
             android:id="@+id/btnDelAll"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Xóa toàn bộ ảnh trong thư mục đã xử lý" />
+            android:text="Xóa toàn bộ ảnh đã xử lý" />
 
         <ProgressBar
             android:id="@+id/progress"
@@ -625,7 +628,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Ảnh lưu tại Pictures/BookScanner" />
+            android:text="Ảnh lưu ở Pictures/BookScanner" />
 
         <LinearLayout
             android:id="@+id/results"

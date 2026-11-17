@@ -184,7 +184,7 @@ object HorizontalFlattener {
         Imgproc.remap(page, out, mapX, mapY, Imgproc.INTER_CUBIC, Core.BORDER_REPLICATE)
         mapX.release(); mapY.release()
         val edge = cc[if (gutterRight) W - 1 else 0]
-        return Result(out, "Kéo giãn chữ gần gáy: nén ≈ %.0f%% sát gáy (θ≈%.0f°, σ≈%.1f cm).".format((1 - edge) * 100, bestTh, bestSg))
+        return Result(out, "Giãn chữ gần gáy: nén ≈ %.0f%%.".format((1 - edge) * 100))
     }
 
     private fun polyFit(x: DoubleArray, y: DoubleArray, deg: Int, scale: Double): DoubleArray? {

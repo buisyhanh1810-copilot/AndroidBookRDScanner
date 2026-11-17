@@ -115,7 +115,7 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
             if (ok) launchShot() else {
                 replaceTarget = null
-                Toast.makeText(this, "Cần cấp quyền camera để chụp", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Cần quyền camera", Toast.LENGTH_LONG).show()
             }
         }
     private val pickOne =
@@ -134,7 +134,7 @@ class MainActivity : AppCompatActivity() {
             val list = r.data?.getStringArrayListExtra(CaptureActivity.RESULT_URIS).orEmpty()
             if (list.isNotEmpty()) {
                 addToQueue(list.map { Uri.parse(it) })
-                tvStatus.text = "Đã chụp ${list.size} ảnh, đang ở hàng đợi – bấm Xử lý."
+                tvStatus.text = "Đã thêm ${list.size} ảnh. Bấm Xử lý."
             }
         }
 
@@ -205,23 +205,23 @@ class MainActivity : AppCompatActivity() {
 
         spSplit.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("Tự động", "Luôn tách đôi", "Không tách (1 trang)")
+            listOf("Tự động", "Luôn tách đôi", "Không tách")
         )
 
         spRotate.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("Không xoay", "Xoay 180° (ảnh bị ngược)", "Xoay 90° sang phải", "Xoay 90° sang trái")
+            listOf("Không xoay", "Xoay 180°", "Xoay 90° phải", "Xoay 90° trái")
         )
         val ver = try { packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "?" }
         tvVersion.text = "Phiên bản $ver"
         spOutput.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("Nguyên gốc (ảnh màu)", "Đen trắng")
+            listOf("Ảnh màu", "Đen trắng")
         )
         val pf = getSharedPreferences("scan", MODE_PRIVATE)
         spGutter.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("Gáy ở bên trái trang", "Gáy ở bên phải trang", "Không có gáy (tờ rời)")
+            listOf("Gáy bên trái", "Gáy bên phải", "Không gáy (tờ rời)")
         )
         spGutter.setSelection(pf.getInt("gs", 2).coerceIn(0, 2))
         pf.getString("mm", null)?.let { etMergeMargin.setText(it) }
@@ -236,7 +236,7 @@ class MainActivity : AppCompatActivity() {
         cbContent.isChecked = (pf.all["cc"] as? Boolean) ?: false   // khoá "cc" từng bị dùng lẫn kiểu chuỗi/boolean -> đọc an toàn
         spCalib.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item,
-            listOf("Tự động (mặc định)", "Nâng cao (chọn ảnh mẫu)")
+            listOf("Tự động", "Nâng cao (ảnh mẫu)")
         )
         spCalib.setSelection(pf.getInt("cb", 0).coerceIn(0, 1))
         spCalib.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
@@ -252,7 +252,7 @@ class MainActivity : AppCompatActivity() {
         spOutput.setSelection(pf.getInt("ot", 1).coerceIn(0, 1))
         sbInk.progress = pf.getInt("ink", 5).coerceIn(0, 30)
         fun refreshInk() {
-            tvInk.text = "Độ đậm đen trắng: +${sbInk.progress}%  (cao hơn = chữ đậm hơn, thấp hơn = nhạt hơn)"
+            tvInk.text = "Độ đậm: +${sbInk.progress}%"
             inkBox.visibility = if (spOutput.selectedItemPosition == 1) View.VISIBLE else View.GONE
         }
         spOutput.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
@@ -364,7 +364,7 @@ class MainActivity : AppCompatActivity() {
             b.getString("stamp")?.let { stamp = it }
             for ((i, u) in su.withIndex()) saved.add(Uri.parse(u) to (sp.getOrNull(i) ?: 0.0))
             if (saved.isNotEmpty()) {
-                tvStatus.text = "Đã khôi phục ${saved.size} trang đã lưu (trong Pictures/BookScanner)."
+                tvStatus.text = "Đã khôi phục ${saved.size} trang."
                 val uris = saved.map { it.first }
                 lifecycleScope.launch {
                     for (u in uris) {
@@ -404,7 +404,7 @@ class MainActivity : AppCompatActivity() {
             if (f.exists()) {
                 val txt = f.readText()
                 f.renameTo(java.io.File(f.parentFile, "crash_last.txt"))
-                tvStatus.text = "Lần trước app bị lỗi (đã lưu ở crash_last.txt):\n" + txt.lines().take(8).joinToString("\n")
+                tvStatus.text = "Lần trước app lỗi (crash_last.txt):\n" + txt.lines().take(8).joinToString("\n")
             }
         } catch (_: Throwable) {}
     }
@@ -419,9 +419,9 @@ class MainActivity : AppCompatActivity() {
     private fun refreshCalib() {
         val adv = spCalib.selectedItemPosition == 1
         btnCalib.visibility = if (adv) View.VISIBLE else View.GONE
-        tvCalib.text = if (!adv) "Tự ước lượng màu nền/giấy từ chính ảnh đang xử lý."
-        else if (profile != null) "Đã có hồ sơ nền/giấy" + (if (profile!!.inkRatio > 0) "/chữ" else "") + " – dùng cho cả loạt ảnh. Bấm nút để chọn lại."
-        else "Chưa có hồ sơ – sẽ dùng chế độ tự động cho tới khi bạn chọn ảnh mẫu."
+        tvCalib.text = if (!adv) "Tự lấy màu nền, giấy từ từng ảnh."
+        else if (profile != null) "Đã có hồ sơ nền/giấy" + (if (profile!!.inkRatio > 0) "/chữ" else "") + ", dùng cho cả loạt."
+        else "Chưa có hồ sơ: đang dùng tự động."
     }
 
     private fun options() = ScanOptions(
@@ -457,14 +457,14 @@ class MainActivity : AppCompatActivity() {
     private fun pageH() = (etPageH.text.toString().replace(',', '.').toDoubleOrNull() ?: 29.7).coerceIn(5.0, 80.0)
     private fun updateSpreadInfo() {
         tvSpread.text = if (singleMode)
-            "Một trang: ${fmt(pageW())} × ${fmt(pageH())} cm – chụp thẳng góc, trang chiếm gần đầy khung hình"
+            "1 trang: ${fmt(pageW())} × ${fmt(pageH())} cm. Chụp thẳng, trang gần đầy khung."
         else
-            "Sách mở (2 trang): ${fmt(2 * pageW())} × ${fmt(pageH())} cm – camera chụp ngang"
+            "2 trang: ${fmt(2 * pageW())} × ${fmt(pageH())} cm. Chụp ngang."
     }
 
     /** Bật/tắt các tuỳ chọn theo tab đang chọn (Hai trang / Một trang). */
     private fun applyMode() {
-        tvTitle.text = if (singleMode) "Quét sách – từng trang một" else "Quét sách – tách 2 trang"
+        tvTitle.text = if (singleMode) "Quét sách – 1 trang" else "Quét sách – 2 trang"
         splitBox.visibility = if (singleMode) View.GONE else View.VISIBLE
         cbMerge.visibility = if (singleMode) View.GONE else View.VISIBLE
         cbCrop.visibility = if (singleMode) View.GONE else View.VISIBLE
@@ -479,8 +479,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateQueueUi() {
-        tvQueue.text = "Hàng đợi: ${queue.size} ảnh"
-        btnProcess.text = if (queue.isEmpty()) "Xử lý hàng đợi" else "Xử lý ${queue.size} ảnh"
+        tvQueue.text = "${queue.size} ảnh"
+        btnProcess.text = if (queue.isEmpty()) "Xử lý" else "Xử lý ${queue.size} ảnh"
         btnProcess.isEnabled = !busy && queue.isNotEmpty()
         btnClear.isEnabled = !busy && queue.isNotEmpty()
     }
@@ -539,7 +539,7 @@ class MainActivity : AppCompatActivity() {
             var errors = 0
             val notes = ArrayList<String>()
             for ((i, uri) in work.withIndex()) {
-                tvStatus.text = "Đang xử lý ảnh ${i + 1}/${work.size}…"
+                tvStatus.text = "Đang xử lý ${i + 1}/${work.size}…"
                 try {
                     val outs = withContext(Dispatchers.Default + kotlinx.coroutines.NonCancellable) { processOne(uri, opt) }
                     for ((u, th) in outs) addThumb(u, th)
@@ -549,11 +549,11 @@ class MainActivity : AppCompatActivity() {
                     updateQueueUi()
                 } catch (e: Throwable) {
                     errors++
-                    tvStatus.text = "Lỗi ở ảnh ${i + 1}: ${e.message}"
+                    tvStatus.text = "Lỗi ảnh ${i + 1}: ${e.message}"
                 }
             }
-            tvStatus.text = "Xong: $total trang đã lưu vào Pictures/BookScanner" +
-                (if (errors > 0) " ($errors ảnh lỗi, còn trong hàng đợi)" else "") +
+            tvStatus.text = "Xong: $total trang" +
+                (if (errors > 0) " · $errors ảnh lỗi (còn trong hàng đợi)" else "") +
                 (if (notes.isNotEmpty()) "\n" + notes.joinToString("\n") else "")
             setBusy(false)
         }
@@ -609,15 +609,15 @@ class MainActivity : AppCompatActivity() {
         val n = selected.size
         btnSelAll.text = if (thumbOf.isNotEmpty() && n == thumbOf.size) "Bỏ chọn" else "Chọn tất cả"
         btnSelAll.isEnabled = !busy && thumbOf.isNotEmpty()
-        btnDelSel.text = "Xóa đã chọn ($n)"
+        btnDelSel.text = "Xóa ($n)"
         btnDelSel.isEnabled = !busy && n > 0
-        btnRedo.text = "Xử lý lại đã chọn, thay thế ($n)"
+        btnRedo.text = "Xử lý lại ($n)"
         btnRedo.isEnabled = !busy && n > 0
         btnDelAll.isEnabled = !busy
         val ns = selected.mapNotNull { srcOf[it] }.distinct().size
         btnReplace.isEnabled = !busy && ns == 1
-        btnReplace.text = if (n == 0 || ns == 1) "Thay bằng ảnh mới: chụp lại / chọn lại"
-        else "Thay bằng ảnh mới: chọn các trang của MỘT ảnh gốc"
+        btnReplace.text = if (n == 0 || ns == 1) "Thay bằng ảnh mới"
+        else "Thay: chọn trang của 1 ảnh gốc"
     }
 
     private fun toggleSelectAll() {
@@ -638,8 +638,8 @@ class MainActivity : AppCompatActivity() {
         val n = selected.size
         if (n == 0) return
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Xóa $n ảnh đã chọn?")
-            .setMessage("Ảnh bị xóa khỏi thư mục Pictures/BookScanner. Không hoàn tác được.")
+            .setTitle("Xóa $n ảnh?")
+            .setMessage("Không hoàn tác được.")
             .setPositiveButton("Xóa") { _, _ -> deleteSelected() }
             .setNegativeButton("Hủy", null).show()
     }
@@ -654,15 +654,15 @@ class MainActivity : AppCompatActivity() {
                 if (done) { ok++; forget(k) }
             }
             tvStatus.text = "Đã xóa $ok/${keys.size} ảnh" +
-                (if (ok < keys.size) " (${keys.size - ok} ảnh không xóa được: có thể đã bị xóa trước đó hoặc do ứng dụng khác tạo)" else "")
+                (if (ok < keys.size) " (${keys.size - ok} không xóa được)" else "")
             setBusy(false)
         }
     }
 
     private fun confirmDeleteAll() {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Xóa TOÀN BỘ ảnh trong thư mục đã xử lý?")
-            .setMessage("Xóa mọi ảnh trong Pictures/BookScanner mà ứng dụng này đã tạo (cả các lần trước). Không hoàn tác được. File PDF trong Download/BookScanner không bị xóa.")
+            .setTitle("Xóa toàn bộ ảnh đã xử lý?")
+            .setMessage("Xóa mọi ảnh trong Pictures/BookScanner do app tạo. Không hoàn tác. PDF không bị xóa.")
             .setPositiveButton("Xóa tất cả") { _, _ -> deleteAll() }
             .setNegativeButton("Hủy", null).show()
     }
@@ -674,8 +674,8 @@ class MainActivity : AppCompatActivity() {
                 try { Exporter.deleteAllScans(this@MainActivity) } catch (e: Throwable) { 0 to -1 }
             }
             results.removeAllViews(); thumbOf.clear(); saved.clear(); srcOf.clear(); selected.clear()
-            tvStatus.text = if (fail < 0) "Lỗi khi xóa thư mục"
-            else "Đã xóa $ok ảnh" + (if (fail > 0) " ($fail ảnh không xóa được: do ứng dụng khác tạo hoặc cần cấp quyền)" else "")
+            tvStatus.text = if (fail < 0) "Lỗi khi xóa"
+            else "Đã xóa $ok ảnh" + (if (fail > 0) " ($fail không xóa được)" else "")
             setBusy(false)
         }
     }
@@ -713,15 +713,15 @@ class MainActivity : AppCompatActivity() {
     private fun confirmReplace() {
         val srcs = selected.mapNotNull { srcOf[it] }.distinct()
         if (srcs.size != 1) {
-            Toast.makeText(this, "Hãy chọn các trang thuộc đúng MỘT ảnh gốc", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Chọn trang của đúng 1 ảnh gốc", Toast.LENGTH_LONG).show()
             return
         }
         val old = srcs[0]
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Thay trang lỗi bằng ảnh mới")
-            .setMessage("Ảnh mới sẽ được xử lý bằng tùy chọn hiện tại. Nếu thành công, MỌI trang kết quả cũ của ảnh gốc này bị xóa và thay bằng trang mới. Nếu lỗi thì giữ nguyên bản cũ.")
+            .setTitle("Thay bằng ảnh mới")
+            .setMessage("Ảnh mới xử lý với tùy chọn hiện tại. Thành công: xóa mọi trang cũ của ảnh gốc này, thay bằng trang mới. Lỗi: giữ bản cũ.")
             .setPositiveButton("Chụp lại") { _, _ -> replaceTarget = old; shootOnce() }
-            .setNeutralButton("Chọn từ thư viện") { _, _ -> replaceTarget = old; pickOne.launch("image/*") }
+            .setNeutralButton("Thư viện") { _, _ -> replaceTarget = old; pickOne.launch("image/*") }
             .setNegativeButton("Hủy", null).show()
     }
 
@@ -729,7 +729,7 @@ class MainActivity : AppCompatActivity() {
         val opt = options()
         val oldKeys = srcOf.filter { it.value == old }.keys.toList()
         setBusy(true)
-        tvStatus.text = "Đang xử lý ảnh mới để thay thế…"
+        tvStatus.text = "Đang xử lý ảnh mới…"
         lifecycleScope.launch {
             try {
                 val outs = withContext(Dispatchers.Default + kotlinx.coroutines.NonCancellable) { processOne(newUri, opt) }
@@ -741,7 +741,7 @@ class MainActivity : AppCompatActivity() {
                 tvStatus.text = "Đã thay ${oldKeys.size} trang cũ bằng ${outs.size} trang mới." +
                     (lastNote?.let { if (it.isNotBlank()) "\n$it" else "" } ?: "")
             } catch (e: Throwable) {
-                tvStatus.text = "Lỗi khi xử lý ảnh mới: ${e.message} – giữ nguyên bản cũ."
+                tvStatus.text = "Lỗi: ${e.message}. Giữ bản cũ."
             }
             setBusy(false)
         }
@@ -750,12 +750,12 @@ class MainActivity : AppCompatActivity() {
     private fun confirmRedoSelected() {
         val srcs = selected.mapNotNull { srcOf[it] }.distinct()
         if (srcs.isEmpty()) {
-            Toast.makeText(this, "Không còn ảnh gốc của các ảnh đã chọn (đã mở lại app từ đầu)", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Không còn ảnh gốc (app đã mở lại)", Toast.LENGTH_LONG).show()
             return
         }
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Xử lý lại ${srcs.size} ảnh gốc?")
-            .setMessage("Xử lý lại bằng các tùy chọn hiện tại. Nếu thành công, MỌI trang kết quả cũ của ảnh gốc đó (kể cả trang không được chọn) bị xóa và thay bằng trang mới. Nếu xử lý lỗi thì giữ nguyên bản cũ.")
+            .setMessage("Dùng tùy chọn hiện tại. Thành công: thay mọi trang cũ của ảnh gốc (cả trang chưa chọn). Lỗi: giữ bản cũ.")
             .setPositiveButton("Xử lý lại") { _, _ -> redoSelected(srcs) }
             .setNegativeButton("Hủy", null).show()
     }
@@ -767,7 +767,7 @@ class MainActivity : AppCompatActivity() {
             var done = 0
             var errors = 0
             for ((i, src) in srcs.withIndex()) {
-                tvStatus.text = "Đang xử lý lại ảnh ${i + 1}/${srcs.size}…"
+                tvStatus.text = "Đang xử lý lại ${i + 1}/${srcs.size}…"
                 val oldKeys = srcOf.filter { it.value == src }.keys.toList()
                 try {
                     val outs = withContext(Dispatchers.Default + kotlinx.coroutines.NonCancellable) { processOne(Uri.parse(src), opt) }
@@ -779,11 +779,11 @@ class MainActivity : AppCompatActivity() {
                     done++
                 } catch (e: Throwable) {
                     errors++
-                    tvStatus.text = "Lỗi khi xử lý lại ảnh ${i + 1}: ${e.message}"
+                    tvStatus.text = "Lỗi ảnh ${i + 1}: ${e.message}"
                 }
             }
-            tvStatus.text = "Đã thay thế kết quả của $done/${srcs.size} ảnh gốc" +
-                (if (errors > 0) " ($errors ảnh lỗi, giữ nguyên bản cũ)" else "")
+            tvStatus.text = "Đã thay $done/${srcs.size} ảnh gốc" +
+                (if (errors > 0) " ($errors lỗi, giữ bản cũ)" else "")
             setBusy(false)
         }
     }
@@ -798,7 +798,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) { Exporter.savePdf(this@MainActivity, saved.toList(), "scan_$stamp") }
-                tvStatus.text = "Đã lưu PDF vào Download/BookScanner"
+                tvStatus.text = "Đã lưu PDF ở Download/BookScanner"
             } catch (e: Throwable) {
                 tvStatus.text = "Lỗi PDF: ${e.message}"
             }
